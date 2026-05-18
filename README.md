@@ -1,4 +1,4 @@
-# [Project Name]
+# [InternStellar]
 
 ## 🧩 Problem
 Remittances currently account for approximately 8.7% of the Philippine GDP. However, the lack of structured management tools leads to several systemic failures:
