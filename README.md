@@ -26,7 +26,7 @@ Who are your primary users? (e.g., OFWs, unbanked Filipinos, MSMEs, merchants)
 - Inventory and Conditional Escrow — QR-verified escrow payment system.
 - Emergency Fund and Multi-Sig Controls — Dual-approval emergency withdrawals.
 
-## 🛠️ Tech Stack
+## 🛠 Tech Stack
 - Frontend: React/Next.js/Tailwind CSS
 - Backend: Next.js API Routes/Supabase
 - Blockchain: Stellar (Soroban / Horizon API / Stellar SDK)
@@ -52,7 +52,7 @@ npm run dev
 ## 🎥 Demo
 - 🔗 Live App: [link]
 - 🎬 Demo Video: [YouTube / Loom link]
-- 🖼️ Pitch Deck: [Google Slides / Canva link]
+- 🖼 Pitch Deck: [Google Slides / Canva link]
 
 ## 👨‍💻 Team
 | Name | Role | GitHub |
