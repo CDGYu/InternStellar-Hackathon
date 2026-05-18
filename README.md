@@ -1,4 +1,4 @@
-# [InternStellar]
+# InternStellar
 
 ## 🧩 Problem
 Remittances currently account for approximately 8.7% of the Philippine GDP. However, the lack of structured management tools leads to several systemic failures:
@@ -57,7 +57,10 @@ npm run dev
 ## 👨‍💻 Team
 | Name | Role | GitHub |
 |---|---|---|
-| Name | Role | @handle |
+| Rene Vincent Cosme | Backend Engineer | @RVBCosme |
+| Gerardo Razon III | Frontend Engineer | @Inuyashatrades |
+| Charles Derick Yu | Product Lead | @CDGYu |
+| Prince Edwin Zablan | Full-Stack Engineer | @zprinceedwin |
 
 ## 📜 License
 MIT
