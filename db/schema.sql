@@ -1,6 +1,9 @@
 -- db/schema.sql
--- InternStellar — database schema (Day 1)
--- Run order:  schema.sql  ->  policies.sql  ->  seed.sql
+-- InternStellar — database schema
+-- Run order:  schema.sql  ->  policies.sql  ->  realtime.sql  ->  seed.sql
+--
+-- SCHEMA LOCKED (Day 2): walked through with P2 (API routes) and P3 (UI).
+-- Changes after this require a team sync — they break everyone downstream.
 --
 -- CONVENTION: all money is stored in STROOPS as integers (bigint).
 --             1 XLM = 10,000,000 stroops. Never store XLM as a float.
@@ -77,8 +80,6 @@ create table if not exists settlement (
 );
 
 -- ============================================================
--- DAY 2 — enable realtime (uncomment when you reach Day 2).
--- The dashboard toggle does the same thing; pick one, not both.
+-- Realtime is configured in db/realtime.sql (Day 2 task) — kept in a
+-- separate file so it's easy to audit and re-run. Run it after this.
 -- ============================================================
--- alter publication supabase_realtime add table wishlist;
--- alter publication supabase_realtime add table wishlist_item;
