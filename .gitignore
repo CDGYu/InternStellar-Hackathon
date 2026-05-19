@@ -30,7 +30,6 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-
 # vercel
 .vercel
 
@@ -40,3 +39,5 @@ next-env.d.ts
 
 # local env files (NEVER commit secrets; .env.example IS committed)
 .env*.local
+
+.CLAUDE.md
