@@ -94,7 +94,7 @@ InternStellar-Hackathon/
 - Generates a fresh `Keypair` locally.
 - Calls `https://friendbot.stellar.org?addr=<public>`.
 - On success: prints public + secret keys and a copy/paste line for
-  `.env.local` (e.g. `STELLAR_TEST_SECRET=...`).
+  `.env.local` (e.g. `STELLAR_DEMO_SECRET_KEY=...`).
 - On failure: prints the raw Friendbot response body and exits non-zero.
 - **Never writes to `.env.local` automatically.** Operator copies manually.
 
@@ -116,7 +116,7 @@ operator runs:  npx tsx scripts/fund-test-account.ts
    ├─► fetch friendbot.stellar.org?addr=<public>
    │     ├─ 200 OK  → print keys + .env.local hint
    │     └─ non-200 → print body, exit 1
-   └─► operator pastes STELLAR_TEST_SECRET into .env.local
+   └─► operator pastes STELLAR_DEMO_SECRET_KEY into .env.local
 ```
 
 ### 5.2 Verification flow (repeatable)
@@ -225,7 +225,7 @@ While executing the implementation plan, the agent will NOT:
 
 ## 12. Open questions (none blocking)
 
-- Long-term home of `STELLAR_TEST_SECRET` for the team (1Password? shared
+- Long-term home of `STELLAR_DEMO_SECRET_KEY` for the team (1Password? shared
   Supabase row?) is out of scope here.
 - Whether to add a `lib/stellar/index.ts` barrel export will be decided
   during implementation, based on import ergonomics.
