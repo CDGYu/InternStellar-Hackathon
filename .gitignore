@@ -37,3 +37,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local env files (NEVER commit secrets; .env.example IS committed)
+.env*.local
