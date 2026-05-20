@@ -16,6 +16,45 @@ rehearsed at least twice with P1 driving.
 
 ---
 
+## ⏱️ Status as of 2026-05-21 EOD
+
+Today (2026-05-21) the Day 1-4 work from `Rene`, `Prince`, `Charles`,
+and `Frontend` branches all merged into `main` — `main` now carries
+the full end-to-end stack for the first time. See
+[`DAY-5-SUMMARY.md`](DAY-5-SUMMARY.md) for the full integration log.
+
+Day 5 task gate at end of 2026-05-21:
+
+| Owner | Item | Status |
+|---|---|---|
+| P1 | 4 new edge-case tests in `src/test.rs` | ❌ not started |
+| P1 | `internstellar-contract/scripts/demo.sh` | ❌ not started |
+| P2 | `GET /api/health` route | ❌ not started |
+| P2 | `scripts/_test-no-stacktrace-leak.ts` + `npm run test:no-leaks` | ❌ not started |
+| P2 | `request_id` / `Retry-After` / `AbortSignal` / idempotency | ❌ not started |
+| P4 | `db/reset.sql` (`reset_demo()` RPC) | ✅ done |
+| P4 | `scripts/reset-demo.ts` + `npm run reset` | ✅ done |
+| P4 | 3× reset reliability run | 🟡 operator step (not run yet) |
+| P4 | Pitch deck structure + speaker notes | ✅ done (`docs/pitch/pitch-deck-outline.md`) |
+| P4 | Pitch deck — real stats, screenshots, diagram | 🟡 placeholders |
+| All | Two timed rehearsals (< 3 min each) | ❌ not run yet |
+| P4 | Drop / replace `dev_write_*` RLS policies | ✅ done |
+| P4 | Rotate Supabase `service_role` key | ✅ done |
+| P4 | Fill `STELLAR_DEMO_SECRET_KEY` in `.env.local` | ❌ operator step (unverified) |
+| All | `golden-path-v1` git tag (Day 4 carry-over) | ❌ not tagged |
+| P4 | `day-5-reset-ready` git tag | ❌ not tagged |
+
+**Net:** P4 reset/pitch work is in; P1 contract edges + P2 API
+hardening + operator steps are the blockers before rehearsal #1.
+
+**Bonus shipped today (not in the original Day 5 plan but landed
+anyway):** `db/bills.sql` + `lib/stellar/bills.ts` +
+`app/api/bills/pay/route.ts` + `scripts/setup-billers.ts` +
+`npm run setup-billers`. Bills payment is wired end-to-end; team needs
+to decide on Day 6 whether to include it in the live demo or hide it.
+
+---
+
 ## P1 (Prince) — Contract edge cases + demo script
 
 ### Already covered (22 tests pass on `internstellar-contract/`)
@@ -156,7 +195,7 @@ broken JWTs to each route and asserts no response field matches
 
 ### Day 5 additions (the task language → concrete work)
 
-**`db/reset.sql` (new) — one-shot truncate + reseed sequence:**
+**`db/reset.sql` (new) — one-shot truncate + reseed sequence:** ✅ **shipped 2026-05-21** as `reset_demo()` Postgres RPC (idempotent, `SECURITY DEFINER`, `service_role` only). The actual file diverges from the snippet below — it uses an RPC wrapper instead of inline SQL so `npm run reset` is one round-trip. See current `db/reset.sql`.
 
 ```sql
 -- Clean transactional state (keeps schema/policies/grants)
@@ -173,7 +212,7 @@ update public.inventory set stock = 50;
 
 Idempotent. Re-runnable many times during rehearsals.
 
-**`scripts/reset-demo.ts` (new) — Node runner:**
+**`scripts/reset-demo.ts` (new) — Node runner:** ✅ **shipped 2026-05-21** (161 lines, loads `.env.local`, calls `reset_demo()` RPC, best-effort Friendbot top-up unless `--db-only`). See current `scripts/reset-demo.ts`.
 
 ```ts
 // Reads .env.local for SUPABASE_SERVICE_ROLE_KEY + NEXT_PUBLIC_SUPABASE_URL.
@@ -183,13 +222,13 @@ Idempotent. Re-runnable many times during rehearsals.
 // Prints: "Demo reset complete. {wishlists=0, settlements=0, stock=50}".
 ```
 
-Add to `package.json`:
+Add to `package.json`: ✅ **shipped 2026-05-21** — both scripts are in `package.json` (with the flag spelled `--db-only` rather than `--skip-funding`). Also shipped: `"setup-billers"` for the new bills feature.
 ```
 "reset":               "npx tsx scripts/reset-demo.ts",
-"reset:db-only":       "npx tsx scripts/reset-demo.ts --skip-funding"
+"reset:db-only":       "npx tsx scripts/reset-demo.ts --db-only"
 ```
 
-Test it 3× in a row. Must be boring and reliable.
+Test it 3× in a row. Must be boring and reliable. **TODO (operator):** run the 3× reliability check.
 
 **Pitch deck near-final** — fill in
 [`docs/pitch/pitch-deck-outline.md`](docs/pitch/pitch-deck-outline.md):
