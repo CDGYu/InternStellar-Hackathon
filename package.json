@@ -8,10 +8,12 @@
     "start": "next start",
     "fund-test-account": "npx tsx scripts/fund-test-account.ts",
     "verify-stellar": "npx tsx scripts/verify-stellar-connection.ts",
-    "test:stellar-lib": "npx tsx scripts/_test-stellar-lib.ts"
+    "test:stellar-lib": "npx tsx scripts/_test-stellar-lib.ts",
+    "test:escrow-wiring": "npx tsx scripts/_test-escrow-wiring.ts"
   },
   "dependencies": {
     "@stellar/stellar-sdk": "12.3.0",
+    "@supabase/supabase-js": "2.45.4",
     "next": "14.2.18",
     "react": "18.3.1",
     "react-dom": "18.3.1"
