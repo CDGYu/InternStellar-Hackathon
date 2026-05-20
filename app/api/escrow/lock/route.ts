@@ -183,7 +183,7 @@ export async function POST(req: Request): Promise<NextResponse> {
 
   // ---- 6. Respond -------------------------------------------------
   return ok({
-    escrow_id: wishlist_id,
+    escrow_id: escrowId,
     tx_hash: txHash,
     status: "locked",
     amount_stroops: grocery_stroops.toString(),
