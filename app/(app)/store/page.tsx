@@ -18,6 +18,10 @@ import { formatXlm, formatXlmWithUnit, truncateHash } from "@/lib/format-xlm";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { timeAgo } from "@/lib/time-ago";
 
+import { MarkDeliveredButton } from "./MarkDeliveredButton";
+import { OrdersRealtimeRefresher } from "./OrdersRealtimeRefresher";
+import { ReceiptCard } from "./ReceiptCard";
+
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
@@ -43,6 +47,11 @@ export default async function StoreDashboardPage() {
       />
 
       <main className="mx-auto max-w-7xl px-4 md:px-8 pb-24 pt-10">
+        {/* Invisible — subscribes to wishlist + settlement events and
+            triggers router.refresh() so the queue updates live when a
+            family locks. */}
+        <OrdersRealtimeRefresher />
+
         <section className="mb-12">
           <p className="text-sm uppercase tracking-[0.22em] text-ink-muted font-medium">
             Welcome back
@@ -125,6 +134,10 @@ export default async function StoreDashboardPage() {
               </div>
             </div>
 
+            {data.receipts.length > 0 ? (
+              <ReceiptsPanel receipts={data.receipts} />
+            ) : null}
+
             <InventoryPanel
               inventory={data.inventory}
               outOfStockCount={data.totals.outOfStockCount}
@@ -138,6 +151,40 @@ export default async function StoreDashboardPage() {
 
 function firstName(displayName: string): string {
   return displayName.split(" ")[0] ?? displayName;
+}
+
+/* -------------------------------------------------------------------- */
+/* Receipts panel — released orders with their settled details          */
+/* -------------------------------------------------------------------- */
+
+function ReceiptsPanel({
+  receipts,
+}: {
+  receipts: import("@/lib/dashboard/store").StoreReceipt[];
+}) {
+  return (
+    <Card className="p-8 md:p-10">
+      <div className="flex items-end justify-between gap-6 mb-8">
+        <div>
+          <h2 className="font-display text-2xl md:text-3xl font-extrabold tracking-tight text-ink">
+            Receipts
+          </h2>
+          <p className="text-ink-muted mt-2 text-sm md:text-base">
+            Settled orders. Funds have already landed in your store account.
+          </p>
+        </div>
+        <span className="hidden md:inline-flex items-center bg-surface shadow-neu-inset-sm rounded-full px-3 py-1.5 text-xs font-medium text-ink-muted">
+          {receipts.length} settled
+        </span>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {receipts.map((r) => (
+          <ReceiptCard key={r.order.id} receipt={r} />
+        ))}
+      </div>
+    </Card>
+  );
 }
 
 /* -------------------------------------------------------------------- */
@@ -209,7 +256,18 @@ function OrderQueue({
                     ) : null}
                   </p>
                 </div>
-                {o.escrow_tx_hash ? (
+                {/* Trailing slot:
+                      locked    → Mark-as-delivered CTA
+                      delivered → "Waiting for confirmation" pill
+                      else      → Stellar Expert link (if there's a tx hash) */}
+                {o.status === "locked" ? (
+                  <MarkDeliveredButton wishlistId={o.id} />
+                ) : o.status === "delivered" ? (
+                  <span className="shrink-0 inline-flex items-center gap-2 bg-surface shadow-neu-inset-sm rounded-full px-3 py-1.5 text-xs font-medium text-ink-muted">
+                    <span className="h-2 w-2 rounded-full bg-amber-400" aria-hidden />
+                    Waiting for confirmation
+                  </span>
+                ) : o.escrow_tx_hash ? (
                   <a
                     href={`https://stellar.expert/explorer/testnet/tx/${o.escrow_tx_hash}`}
                     target="_blank"

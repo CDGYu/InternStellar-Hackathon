@@ -8,7 +8,15 @@
     "start": "next start",
     "fund-test-account": "npx tsx scripts/fund-test-account.ts",
     "verify-stellar": "npx tsx scripts/verify-stellar-connection.ts",
+<<<<<<< Updated upstream
     "test:stellar-lib": "npx tsx scripts/_test-stellar-lib.ts"
+=======
+    "test:stellar-lib": "npx tsx scripts/_test-stellar-lib.ts",
+    "test:escrow-wiring": "npx tsx scripts/_test-escrow-wiring.ts",
+    "reset": "npx tsx scripts/reset-demo.ts",
+    "reset:db-only": "npx tsx scripts/reset-demo.ts --db-only",
+    "setup-billers": "npx tsx scripts/setup-billers.ts"
+>>>>>>> Stashed changes
   },
   "dependencies": {
     "@stellar/stellar-sdk": "12.3.0",
@@ -27,6 +35,7 @@
     "@types/react": "18.3.3",
     "@types/react-dom": "18.3.0",
     "autoprefixer": "^10.4.20",
+    "dotenv": "^17.4.2",
     "postcss": "^8.4.47",
     "tailwindcss": "^3.4.13",
     "typescript": "5.4.5"

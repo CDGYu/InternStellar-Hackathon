@@ -18,6 +18,14 @@ import { formatXlmWithUnit, truncateHash } from "@/lib/format-xlm";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { timeAgo } from "@/lib/time-ago";
 
+import { BalanceBreakdown } from "./BalanceBreakdown";
+import { ConfirmDeliveryButton } from "./ConfirmDeliveryButton";
+import {
+  WishlistBuilder,
+  type BuilderInventoryItem,
+  type BuilderLineItem,
+} from "./WishlistBuilder";
+
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
@@ -38,6 +46,27 @@ export default async function FamilyDashboardPage() {
   // ones are already filtered out by the loader.
   const inFlight = data.wishlists.filter((w) => w.status !== "released");
   const released = data.wishlists.filter((w) => w.status === "released");
+
+  // Bigints don't serialize across the server-client boundary, so we
+  // stringify the few numeric fields the WishlistBuilder needs.
+  const builderInventory: BuilderInventoryItem[] = data.inventory.map((i) => ({
+    id: i.id,
+    name: i.name,
+    category: i.category,
+    price_stroops: i.price_stroops.toString(),
+    stock: i.stock,
+    unit: i.unit,
+  }));
+  const builderInitialItems: BuilderLineItem[] = data.activeDraft
+    ? data.activeDraft.items.map((it) => ({
+        id: it.id,
+        inventory_id: it.inventory_id,
+        inventory_name: it.inventory_name,
+        inventory_unit: it.inventory_unit,
+        quantity: it.quantity,
+        price_stroops_at_add: it.price_stroops_at_add.toString(),
+      }))
+    : [];
 
   return (
     <div className="min-h-screen bg-surface">
@@ -62,13 +91,13 @@ export default async function FamilyDashboardPage() {
                 <span className="text-ink font-medium">
                   {inFlight.length} wishlist{inFlight.length === 1 ? "" : "s"}
                 </span>{" "}
-                in flight. Approve, track, and confirm delivery once your order
-                arrives.
+                in flight. Build a new one below, or confirm delivery on an
+                order that just arrived.
               </>
             ) : (
               <>
-                Nothing in flight right now — start a new wishlist whenever
-                you&apos;re ready and your sponsor will see it on their dashboard.
+                Pick what you need from your local store. Funds lock in escrow
+                once you submit; release when you confirm delivery.
               </>
             )}
           </p>
@@ -113,46 +142,45 @@ export default async function FamilyDashboardPage() {
           </Card>
         </section>
 
-        {data.wishlists.length === 0 ? (
-          <Card className="p-12 md:p-16 text-center">
-            <div className="inline-flex">
-              <IconWell tone="accent" size="lg">
-                <PackageIcon className="h-8 w-8" />
-              </IconWell>
-            </div>
-            <h2 className="mt-6 font-display text-2xl md:text-3xl font-extrabold tracking-tight text-ink">
-              No wishlists yet.
-            </h2>
-            <p className="mt-3 max-w-md mx-auto text-ink-muted">
-              Once you build a wishlist from the store&apos;s inventory and
-              submit it for approval, it will appear here with full on-chain
-              tracking.
-            </p>
-          </Card>
-        ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
-            <div className="lg:col-span-2 space-y-10">
+        <div className="mb-10">
+          <BalanceBreakdown userId={data.family.id} />
+        </div>
+
+        <div className="mb-10">
+          <WishlistBuilder
+            familyId={data.family.id}
+            inventory={builderInventory}
+            initialWishlistId={data.activeDraft?.wishlist.id ?? null}
+            initialStatus={data.activeDraft?.wishlist.status ?? null}
+            initialItems={builderInitialItems}
+            initialEscrowTxHash={data.activeDraft?.wishlist.escrow_tx_hash ?? null}
+          />
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
+          <div className="lg:col-span-2 space-y-10">
+            <WishlistGroup
+              title="In flight"
+              description="Your active orders. Confirm delivery when an order arrives."
+              wishlists={inFlight}
+              emptyText="Nothing in flight — build a new wishlist above."
+              familyId={data.family.id}
+            />
+            {released.length > 0 ? (
               <WishlistGroup
-                title="In flight"
-                description="Your active orders, ordered by most recent update."
-                wishlists={inFlight}
-                emptyText="No orders in flight."
+                title="Delivered"
+                description="Past orders that have been released to the store."
+                wishlists={released}
+                emptyText=""
+                familyId={data.family.id}
+                muted
               />
-              {released.length > 0 ? (
-                <WishlistGroup
-                  title="Delivered"
-                  description="Past orders that have been released to the store."
-                  wishlists={released}
-                  emptyText=""
-                  muted
-                />
-              ) : null}
-            </div>
-            <div>
-              <ActivityFeed activity={data.activity} />
-            </div>
+            ) : null}
           </div>
-        )}
+          <div>
+            <ActivityFeed activity={data.activity} />
+          </div>
+        </div>
       </main>
     </div>
   );
@@ -173,6 +201,7 @@ function WishlistGroup({
   description,
   wishlists,
   emptyText,
+  familyId,
   muted = false,
 }: {
   title: string;
@@ -187,6 +216,7 @@ function WishlistGroup({
     updated_at: string;
   }>;
   emptyText: string;
+  familyId: string;
   muted?: boolean;
 }) {
   return (
@@ -237,7 +267,12 @@ function WishlistGroup({
                     ) : null}
                   </p>
                 </div>
-                {w.escrow_tx_hash ? (
+
+                {/* Trailing slot: the "Confirm delivery" CTA on delivered
+                    orders, otherwise the Stellar Expert link. */}
+                {w.status === "delivered" ? (
+                  <ConfirmDeliveryButton familyId={familyId} wishlistId={w.id} />
+                ) : w.escrow_tx_hash ? (
                   <a
                     href={`https://stellar.expert/explorer/testnet/tx/${w.escrow_tx_hash}`}
                     target="_blank"

@@ -28,9 +28,22 @@ export interface StoreOrderRow {
   total_stroops: bigint;
   notes: string | null;
   escrow_tx_hash: string | null;
+  release_tx_hash: string | null;
   item_count: number;
   created_at: string;
   updated_at: string;
+}
+
+export interface StoreReceiptLineItem {
+  inventory_name: string;
+  inventory_unit: string | null;
+  quantity: number;
+  price_stroops_at_add: bigint;
+}
+
+export interface StoreReceipt {
+  order: StoreOrderRow;
+  items: StoreReceiptLineItem[];
 }
 
 export interface StoreInventoryRow {
@@ -63,7 +76,10 @@ export interface StoreDashboardData {
     /** Inventory items at zero stock. Surfaces a "restock soon" signal. */
     outOfStockCount: number;
   };
+  /** Active orders only — the queue. Released ones live in `receipts`. */
   orders: StoreOrderRow[];
+  /** Released orders with their line items, newest first. Feeds ReceiptCard. */
+  receipts: StoreReceipt[];
   inventory: StoreInventoryRow[];
   activity: StoreSettlementRow[];
 }
@@ -148,7 +164,7 @@ export async function loadStoreDashboard(opts: {
       supabase
         .from("wishlist")
         .select(
-          "id, family_id, status, total_stroops, notes, escrow_tx_hash, created_at, updated_at, family:family_id (display_name)",
+          "id, family_id, status, total_stroops, notes, escrow_tx_hash, release_tx_hash, created_at, updated_at, family:family_id (display_name)",
         )
         .in("id", ids)
         .neq("status", "cancelled"),
@@ -182,6 +198,7 @@ export async function loadStoreDashboard(opts: {
         total_stroops: toBig(w.total_stroops),
         notes: (w.notes as string | null) ?? null,
         escrow_tx_hash: (w.escrow_tx_hash as string | null) ?? null,
+        release_tx_hash: (w.release_tx_hash as string | null) ?? null,
         item_count: itemCounts.get(w.id as string) ?? 0,
         created_at: w.created_at as string,
         updated_at: w.updated_at as string,
@@ -198,8 +215,13 @@ export async function loadStoreDashboard(opts: {
     }));
   }
 
-  // Sort orders by a "queue priority" — what needs the store's attention
-  // first goes to the top: pending_approval > locked > delivered > the rest.
+  // Split released orders out — they get their own receipts panel rather
+  // than mixing with the active queue. Sort actives by "queue priority"
+  // (pending_approval > locked > delivered > draft); sort releases by
+  // most-recent first.
+  const releasedOrders = orders.filter((o) => o.status === "released");
+  orders = orders.filter((o) => o.status !== "released");
+
   const statusRank: Record<WishlistStatus, number> = {
     pending_approval: 0,
     locked: 1,
@@ -211,9 +233,47 @@ export async function loadStoreDashboard(opts: {
   orders.sort((a, b) => {
     const rankDiff = statusRank[a.status] - statusRank[b.status];
     if (rankDiff !== 0) return rankDiff;
-    // Most recently updated first within a status.
     return a.updated_at < b.updated_at ? 1 : -1;
   });
+  releasedOrders.sort((a, b) => (a.updated_at < b.updated_at ? 1 : -1));
+
+  // ---- 3b. Line items for released orders (so receipts can render) --
+  // Skipped when there are no released orders — saves a round-trip in
+  // the common pre-release state.
+  let receipts: StoreReceipt[] = [];
+  if (releasedOrders.length > 0) {
+    const releasedIds = releasedOrders.map((o) => o.id);
+    const { data: lineItems, error: liErr } = await supabase
+      .from("wishlist_item")
+      .select("wishlist_id, quantity, price_stroops_at_add, inventory:inventory_id (name, unit)")
+      .in("wishlist_id", releasedIds);
+
+    if (liErr) {
+      throw new Error(`released line items load failed: ${liErr.message}`);
+    }
+
+    const itemsByWishlist = new Map<string, StoreReceiptLineItem[]>();
+    for (const row of lineItems ?? []) {
+      const inv = Array.isArray((row as any).inventory)
+        ? (row as any).inventory[0]
+        : (row as any).inventory;
+      const wid = row.wishlist_id as string;
+      const item: StoreReceiptLineItem = {
+        inventory_name: (inv?.name as string) ?? "Unknown item",
+        inventory_unit: (inv?.unit as string | null) ?? null,
+        quantity: Number(row.quantity),
+        price_stroops_at_add: toBig(row.price_stroops_at_add),
+      };
+      const arr = itemsByWishlist.get(wid);
+      if (arr) arr.push(item);
+      else itemsByWishlist.set(wid, [item]);
+    }
+
+    receipts = releasedOrders.map((order) => ({
+      order,
+      items: itemsByWishlist.get(order.id) ?? [],
+    }));
+  }
 
   const inventory: StoreInventoryRow[] = (inventoryResult.data ?? []).map((row) => ({
     id: row.id as string,
@@ -248,6 +308,7 @@ export async function loadStoreDashboard(opts: {
       outOfStockCount,
     },
     orders,
+    receipts,
     inventory,
     activity: settlements.slice(0, 10),
   };
