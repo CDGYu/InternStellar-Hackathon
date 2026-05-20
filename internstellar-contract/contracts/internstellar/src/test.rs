@@ -1,7 +1,10 @@
 #![cfg(test)]
 
 use super::*;
-use soroban_sdk::{testutils::Address as _, Address, Env};
+use soroban_sdk::{
+    testutils::{Address as _, Events as _},
+    Address, Env,
+};
 
 // 1 XLM = 10^7 stroops on Stellar. We treat that as one demo "unit" so the
 // numbers in tests still look like ledger amounts instead of dimensionless
@@ -190,9 +193,10 @@ fn lock_escrow_moves_grocery_funds_into_held_escrow() {
     let client = ContractClient::new(&env, &contract_id);
 
     let family = Address::generate(&env);
+    let store = Address::generate(&env);
     client.deposit_and_split(&family, &(1000 * ONE_UNIT), &60u32, &30u32, &10u32);
 
-    let escrow_id = client.lock_escrow(&family, &(200 * ONE_UNIT));
+    let escrow_id = client.lock_escrow(&family, &store, &(200 * ONE_UNIT));
 
     assert_eq!(escrow_id, 1);
     let (_util, groc, _emerg) = client.get_balances(&family);
@@ -206,6 +210,7 @@ fn lock_escrow_moves_grocery_funds_into_held_escrow() {
             .unwrap();
 
         assert_eq!(escrow.family, family);
+        assert_eq!(escrow.store, store);
         assert_eq!(escrow.amount, 200 * ONE_UNIT);
         assert!(!escrow.released);
     });
@@ -218,9 +223,10 @@ fn lock_escrow_rejects_amount_above_grocery_balance() {
     let client = ContractClient::new(&env, &contract_id);
 
     let family = Address::generate(&env);
+    let store = Address::generate(&env);
     client.deposit_and_split(&family, &(1000 * ONE_UNIT), &60u32, &30u32, &10u32);
 
-    client.lock_escrow(&family, &(301 * ONE_UNIT));
+    client.lock_escrow(&family, &store, &(301 * ONE_UNIT));
 }
 
 #[test]
@@ -230,8 +236,23 @@ fn lock_escrow_rejects_zero_amount() {
     let client = ContractClient::new(&env, &contract_id);
 
     let family = Address::generate(&env);
+    let store = Address::generate(&env);
 
-    client.lock_escrow(&family, &0i128);
+    client.lock_escrow(&family, &store, &0i128);
+}
+
+#[test]
+#[should_panic(expected = "family cannot be store")]
+fn lock_escrow_rejects_family_equals_store() {
+    let (env, contract_id) = new_contract();
+    let client = ContractClient::new(&env, &contract_id);
+
+    let family = Address::generate(&env);
+    // Family fully funded, but they try to "send to themselves" — should panic
+    // before any storage mutation.
+    client.deposit_and_split(&family, &(1000 * ONE_UNIT), &60u32, &30u32, &10u32);
+
+    client.lock_escrow(&family, &family, &(100 * ONE_UNIT));
 }
 
 #[test]
@@ -240,8 +261,9 @@ fn release_escrow_marks_existing_escrow_released() {
     let client = ContractClient::new(&env, &contract_id);
 
     let family = Address::generate(&env);
+    let store = Address::generate(&env);
     client.deposit_and_split(&family, &(1000 * ONE_UNIT), &60u32, &30u32, &10u32);
-    let escrow_id = client.lock_escrow(&family, &(200 * ONE_UNIT));
+    let escrow_id = client.lock_escrow(&family, &store, &(200 * ONE_UNIT));
 
     client.release_escrow(&escrow_id);
 
@@ -257,14 +279,70 @@ fn release_escrow_marks_existing_escrow_released() {
 }
 
 #[test]
+fn release_escrow_credits_store_grocery_bucket() {
+    let (env, contract_id) = new_contract();
+    let client = ContractClient::new(&env, &contract_id);
+
+    let family = Address::generate(&env);
+    let store = Address::generate(&env);
+    client.deposit_and_split(&family, &(1000 * ONE_UNIT), &60u32, &30u32, &10u32);
+
+    let escrow_amount: i128 = 200 * ONE_UNIT;
+    let escrow_id = client.lock_escrow(&family, &store, &escrow_amount);
+
+    // Store starts with zero everywhere; family's grocery bucket dropped by
+    // the escrow amount when lock ran.
+    let (_, store_groc_before, _) = client.get_balances(&store);
+    assert_eq!(store_groc_before, 0);
+
+    client.release_escrow(&escrow_id);
+
+    let (store_util, store_groc, store_emerg) = client.get_balances(&store);
+    assert_eq!(store_groc, escrow_amount);
+    assert_eq!(store_util, 0);
+    assert_eq!(store_emerg, 0);
+
+    // Family's grocery bucket stays at the post-lock value: we already deducted
+    // when lock ran, so release should not change it.
+    let (_, family_groc, _) = client.get_balances(&family);
+    assert_eq!(family_groc, 100 * ONE_UNIT);
+}
+
+#[test]
+fn release_escrow_credits_accumulate_when_store_serves_multiple_families() {
+    let (env, contract_id) = new_contract();
+    let client = ContractClient::new(&env, &contract_id);
+
+    let family_a = Address::generate(&env);
+    let family_b = Address::generate(&env);
+    let store = Address::generate(&env);
+
+    client.deposit_and_split(&family_a, &(1000 * ONE_UNIT), &60u32, &30u32, &10u32);
+    client.deposit_and_split(&family_b, &(1000 * ONE_UNIT), &60u32, &30u32, &10u32);
+
+    let a_escrow = client.lock_escrow(&family_a, &store, &(150 * ONE_UNIT));
+    let b_escrow = client.lock_escrow(&family_b, &store, &(50 * ONE_UNIT));
+
+    client.release_escrow(&a_escrow);
+    client.release_escrow(&b_escrow);
+
+    let (_, store_groc, _) = client.get_balances(&store);
+    // The store's grocery bucket should accumulate both releases. Using
+    // separate amounts (150 + 50 = 200) catches an off-by-one where a release
+    // overwrites instead of adds.
+    assert_eq!(store_groc, 200 * ONE_UNIT);
+}
+
+#[test]
 #[should_panic(expected = "escrow already released")]
 fn release_escrow_rejects_double_release() {
     let (env, contract_id) = new_contract();
     let client = ContractClient::new(&env, &contract_id);
 
     let family = Address::generate(&env);
+    let store = Address::generate(&env);
     client.deposit_and_split(&family, &(1000 * ONE_UNIT), &60u32, &30u32, &10u32);
-    let escrow_id = client.lock_escrow(&family, &(200 * ONE_UNIT));
+    let escrow_id = client.lock_escrow(&family, &store, &(200 * ONE_UNIT));
 
     client.release_escrow(&escrow_id);
     client.release_escrow(&escrow_id);
@@ -279,4 +357,59 @@ fn release_escrow_rejects_unknown_id() {
     let missing_escrow_id = 42u32;
 
     client.release_escrow(&missing_escrow_id);
+}
+
+// ---------------------------------------------------------------------------
+// Event emission tests
+// ---------------------------------------------------------------------------
+// Each public mutating function publishes a single event so a dApp can react
+// without polling state. soroban-sdk's test environment surfaces only the
+// events from the *most recent* contract invocation via `env.events().all()`,
+// so each test asserts the per-call event count rather than a cumulative
+// count. Detailed payload decoding is left to integration tests that talk to
+// a live RPC, because converting back from `Val` in unit tests is unnecessarily
+// noisy.
+
+#[test]
+fn deposit_emits_exactly_one_event_from_our_contract() {
+    let (env, contract_id) = new_contract();
+    let client = ContractClient::new(&env, &contract_id);
+
+    let user = Address::generate(&env);
+    client.deposit_and_split(&user, &(1000 * ONE_UNIT), &60u32, &30u32, &10u32);
+
+    let our_events = env.events().all().filter_by_contract(&contract_id);
+    assert_eq!(our_events.events().len(), 1);
+}
+
+#[test]
+fn lock_escrow_emits_exactly_one_event_from_our_contract() {
+    let (env, contract_id) = new_contract();
+    let client = ContractClient::new(&env, &contract_id);
+
+    let family = Address::generate(&env);
+    let store = Address::generate(&env);
+    client.deposit_and_split(&family, &(1000 * ONE_UNIT), &60u32, &30u32, &10u32);
+    client.lock_escrow(&family, &store, &(200 * ONE_UNIT));
+
+    // env.events().all() returns events from the most recent invocation
+    // (lock_escrow), not cumulatively — so we expect exactly 1 event here.
+    let our_events = env.events().all().filter_by_contract(&contract_id);
+    assert_eq!(our_events.events().len(), 1);
+}
+
+#[test]
+fn release_escrow_emits_exactly_one_event_from_our_contract() {
+    let (env, contract_id) = new_contract();
+    let client = ContractClient::new(&env, &contract_id);
+
+    let family = Address::generate(&env);
+    let store = Address::generate(&env);
+    client.deposit_and_split(&family, &(1000 * ONE_UNIT), &60u32, &30u32, &10u32);
+    let escrow_id = client.lock_escrow(&family, &store, &(200 * ONE_UNIT));
+    client.release_escrow(&escrow_id);
+
+    // Per-invocation count: release_escrow was the last call.
+    let our_events = env.events().all().filter_by_contract(&contract_id);
+    assert_eq!(our_events.events().len(), 1);
 }

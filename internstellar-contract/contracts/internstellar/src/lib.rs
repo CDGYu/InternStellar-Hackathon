@@ -1,5 +1,13 @@
 #![no_std]
-use soroban_sdk::{contract, contractimpl, contracttype, Address, Env};
+use soroban_sdk::{contract, contractimpl, contracttype, symbol_short, Address, Env};
+
+// Event topic naming convention: short symbols (<= 9 ASCII chars) so that
+// `symbol_short!` works without runtime allocation. A dApp listening via the
+// Soroban RPC `getEvents` method filters on these exact topic strings:
+//
+//   "deposit"  — emitted by deposit_and_split   (data: family, util, groc, emerg)
+//   "esc_lock" — emitted by lock_escrow         (data: family, store, escrow_id, amount)
+//   "esc_rel"  — emitted by release_escrow      (data: escrow_id, family, store, amount)
 
 // Bucket key types are kept narrow so storage lookups stay cheap and explicit.
 // One enum variant per bucket per user keeps the data layout flat instead of
@@ -18,6 +26,7 @@ enum DataKey {
 #[contracttype]
 struct Escrow {
     family: Address,
+    store: Address,
     amount: i128,
     released: bool,
 }
@@ -70,6 +79,11 @@ impl Contract {
         env.storage().persistent().set(&groc_key, &new_groc);
         env.storage().persistent().set(&emerg_key, &new_emerg);
 
+        env.events().publish(
+            (symbol_short!("deposit"),),
+            (from, util_share, groc_share, emerg_share),
+        );
+
         (util_share, groc_share, emerg_share)
     }
 
@@ -81,11 +95,17 @@ impl Contract {
         (util, groc, emerg)
     }
 
-    pub fn lock_escrow(env: Env, family: Address, amount: i128) -> u32 {
+    pub fn lock_escrow(env: Env, family: Address, store: Address, amount: i128) -> u32 {
         family.require_auth();
 
         if amount <= 0 {
             panic!("escrow amount must be positive");
+        }
+        // A family paying themselves would let funds leave the escrow without
+        // ever reaching a real merchant. Reject up front so the demo never
+        // shows a "store paid" event where family == store.
+        if family == store {
+            panic!("family cannot be store");
         }
 
         let groc_key = DataKey::Groc(family.clone());
@@ -109,10 +129,16 @@ impl Contract {
         env.storage().persistent().set(
             &DataKey::Escrow(escrow_id),
             &Escrow {
-                family,
+                family: family.clone(),
+                store: store.clone(),
                 amount,
                 released: false,
             },
+        );
+
+        env.events().publish(
+            (symbol_short!("esc_lock"),),
+            (family, store, escrow_id, amount),
         );
 
         escrow_id
@@ -126,6 +152,9 @@ impl Contract {
             .get(&escrow_key)
             .unwrap_or_else(|| panic!("escrow not found"));
 
+        // The family is the party that confirms delivery, so they sign the
+        // release. The contract trusts that "delivery is confirmed" decision
+        // to the family. The store does NOT auth this call.
         escrow.family.require_auth();
 
         if escrow.released {
@@ -134,6 +163,22 @@ impl Contract {
 
         escrow.released = true;
         env.storage().persistent().set(&escrow_key, &escrow);
+
+        // Credit the store's grocery bucket with the held escrow amount.
+        // Internal-bucket model (Option A): no real XLM moves, but
+        // get_balances(store) reflects the payment, which is what the demo
+        // shows. SAC-based real-XLM transfer is the planned Option B.
+        let store_groc_key = DataKey::Groc(escrow.store.clone());
+        let store_groc = read_balance(&env, store_groc_key.clone());
+        let new_store_groc = store_groc
+            .checked_add(escrow.amount)
+            .expect("store groc overflow");
+        env.storage().persistent().set(&store_groc_key, &new_store_groc);
+
+        env.events().publish(
+            (symbol_short!("esc_rel"),),
+            (escrow_id, escrow.family, escrow.store, escrow.amount),
+        );
     }
 }
 
