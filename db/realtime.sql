@@ -1,9 +1,13 @@
 -- db/realtime.sql
--- InternStellar — enable Supabase Realtime (Day 2 task 4).
+-- InternStellar — enable Supabase Realtime.
 -- Run AFTER schema.sql + policies.sql.
 --
--- P3 consumes this on Day 3: the Store dashboard live-updates when a
--- family submits / progresses a wishlist.
+-- P3 consumes this:
+--   * Day 3 — Store dashboard live-updates when a family submits a wishlist
+--     or it transitions through statuses.
+--   * Day 4 — Store dashboard ALSO live-updates when a settlement (lock /
+--     release) row is inserted, so the "funds released" beat shows
+--     instantly on the store view without a polling loop.
 --
 -- The Supabase dashboard toggle (Database -> Replication) does the same
 -- thing as the publication step below. Pick ONE — this file, OR the
@@ -33,6 +37,16 @@ begin
   ) then
     alter publication supabase_realtime add table wishlist_item;
   end if;
+
+  -- Day 4: store dashboard subscribes to settlement to render receipt
+  -- cards the moment lock/release fires.
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public' and tablename = 'settlement'
+  ) then
+    alter publication supabase_realtime add table settlement;
+  end if;
 end $$;
 
 -- ------------------------------------------------------------
@@ -43,3 +57,4 @@ end $$;
 -- ------------------------------------------------------------
 alter table wishlist      replica identity full;
 alter table wishlist_item replica identity full;
+alter table settlement    replica identity full;

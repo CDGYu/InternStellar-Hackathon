@@ -145,10 +145,29 @@ export async function POST(req: Request): Promise<NextResponse> {
     // Same posture as lock: don't fail the request. P4's audit job can backfill.
   }
 
+  // ---- 5b. Decrement inventory via P4's finalize_wishlist RPC -----
+  // Idempotency is enforced by the already_released guard above — if we got
+  // here, this is the first (and only) release call for this wishlist. The
+  // RPC clamps at zero so even out-of-sync demo data can't go negative.
+  let inventoryFinalized = true;
+  const { error: rpcErr } = await supabase.rpc("finalize_wishlist", {
+    p_wishlist_id: wishlist_id,
+  });
+  if (rpcErr) {
+    inventoryFinalized = false;
+    console.error("[escrow/release] finalize_wishlist RPC failed:", rpcErr);
+    // Chain truth + wishlist row + settlement are correct; we just couldn't
+    // decrement inventory. Surface in the response so P3 can show a soft
+    // warning, but DO NOT fail the request — funds have already moved.
+  }
+
   // ---- 6. Respond -------------------------------------------------
   return ok({
     release_tx_hash: txHash,
     status: "released",
-    message: "Payment released to store. Thank you!",
+    inventory_finalized: inventoryFinalized,
+    message: inventoryFinalized
+      ? "Payment released to store. Thank you!"
+      : "Payment released, but inventory decrement failed. P4 audit job will reconcile.",
   });
 }
