@@ -39,10 +39,6 @@ export async function POST(req: Request): Promise<NextResponse> {
   }
   const { family_id, wishlist_id } = validation;
 
-  if (caller.userId !== family_id) {
-    return err(403, "forbidden", "Authenticated user does not match family_id.");
-  }
-
   // ---- 3. Load wishlist + items + family's stellar address --------
   let supabase;
   try {
@@ -50,6 +46,26 @@ export async function POST(req: Request): Promise<NextResponse> {
   } catch (e) {
     console.error("[escrow/lock] Supabase admin client init failed:", e);
     return err(500, "server_misconfigured", "Supabase service env vars missing.");
+  }
+
+  // Auth check: caller must be the family themselves, OR an OFW.
+  // DEMO: there's no schema-level OFW→family link yet (see CLAUDE.md
+  // "Cross-cutting" — TODO P4 to add `family.sponsor_ofw_id`). Until
+  // that lands, any OFW can lock for any family_id. Acceptable on
+  // testnet; tighten before production.
+  if (caller.userId !== family_id) {
+    const { data: callerProfile, error: cpErr } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", caller.userId)
+      .maybeSingle();
+    if (cpErr) {
+      console.error("[escrow/lock] caller profile lookup failed:", cpErr);
+      return err(500, "db_error", "Could not verify caller role.");
+    }
+    if (callerProfile?.role !== "ofw") {
+      return err(403, "forbidden", "Caller must be the family or an OFW.");
+    }
   }
 
   const { data: wishlist, error: wErr } = await supabase

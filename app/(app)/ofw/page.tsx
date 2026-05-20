@@ -5,7 +5,6 @@ import { Card } from "@/components/ui/Card";
 import { DashboardHeader } from "@/components/ui/DashboardHeader";
 import { IconWell } from "@/components/ui/IconWell";
 import { Stat } from "@/components/ui/Stat";
-import { StatusPill, EventPill } from "@/components/ui/StatusPill";
 import {
   CoinsIcon,
   LockIcon,
@@ -15,9 +14,13 @@ import {
 } from "@/components/ui/icons";
 import { loadUserProfile } from "@/lib/auth-role";
 import { loadOfwDashboard } from "@/lib/dashboard/ofw";
-import { formatXlm, formatXlmWithUnit, truncateHash } from "@/lib/format-xlm";
+import { formatXlm, formatXlmWithUnit } from "@/lib/format-xlm";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { timeAgo } from "@/lib/time-ago";
+
+import { BillsPanel } from "./BillsPanel";
+import { OfwWishlistRow } from "./OfwWishlistRow";
+import { SendFundsForm } from "./SendFundsForm";
+import { TransactionHistory } from "./TransactionHistory";
 
 // Reads server-side env (service_role) at request time. force-dynamic keeps
 // Next from trying to statically render this at build, which would crash on
@@ -64,19 +67,45 @@ export default async function OfwDashboardPage() {
 
         <SummaryStats totals={data.totals} releasedCount={data.releasedCount} />
 
+        <div className="mb-10">
+          <SendFundsForm ofwId={data.ofw.id} />
+        </div>
+
+        <div className="mb-10">
+          <BillsPanel
+            ofwId={data.ofw.id}
+            bills={data.bills.map((b) => ({
+              id: b.id,
+              biller: b.biller,
+              account_number: b.account_number,
+              // bigint → string for the client boundary
+              amount_stroops: b.amount_stroops.toString(),
+              due_date: b.due_date,
+              status: b.status,
+              autopay_enabled: b.autopay_enabled,
+            }))}
+          />
+        </div>
+
         {data.activeWishlists.length === 0 && data.activity.length === 0 ? (
           <EmptyState familyName={data.family?.display_name ?? "the family"} />
         ) : (
           <>
             <AllocationPanel allocation={data.allocation} />
 
-            <div className="mt-10 grid grid-cols-1 lg:grid-cols-3 gap-10">
-              <div className="lg:col-span-2">
-                <ActiveWishlists wishlists={data.activeWishlists} />
-              </div>
-              <div>
-                <ActivityFeed activity={data.activity} />
-              </div>
+            <div className="mt-10">
+              <ActiveWishlists
+                wishlists={data.activeWishlists}
+                familyId={FAMILY_DEMO_ID}
+                inventory={data.inventory}
+              />
+            </div>
+
+            <div className="mt-10">
+              <TransactionHistory
+                rows={data.activity}
+                ofwStellarAddress={data.ofw.stellar_public_key}
+              />
             </div>
           </>
         )}
@@ -247,6 +276,8 @@ function AllocationPanel({
 
 function ActiveWishlists({
   wishlists,
+  familyId,
+  inventory,
 }: {
   wishlists: Array<{
     id: string;
@@ -255,8 +286,36 @@ function ActiveWishlists({
     notes: string | null;
     escrow_tx_hash: string | null;
     updated_at: string;
+    items: Array<{
+      id: string;
+      inventory_id: string;
+      inventory_name: string;
+      inventory_unit: string | null;
+      quantity: number;
+      price_stroops_at_add: bigint;
+    }>;
+  }>;
+  familyId: string;
+  inventory: Array<{
+    id: string;
+    name: string;
+    category: string;
+    price_stroops: bigint;
+    stock: number;
+    unit: string | null;
   }>;
 }) {
+  // Stringify the inventory bigints once at this boundary — passed into
+  // every row, so converting per-row would be wasteful.
+  const builderInventory = inventory.map((inv) => ({
+    id: inv.id,
+    name: inv.name,
+    category: inv.category,
+    price_stroops: inv.price_stroops.toString(),
+    stock: inv.stock,
+    unit: inv.unit,
+  }));
+
   return (
     <Card className="p-8 md:p-10 mt-10">
       <div className="flex items-end justify-between gap-6 mb-8">
@@ -265,7 +324,8 @@ function ActiveWishlists({
             Active wishlists
           </h2>
           <p className="text-ink-muted mt-2 text-sm md:text-base">
-            What your family has open right now.
+            What your family has open right now. Edit items, lock funds, or
+            confirm delivery — all from here.
           </p>
         </div>
         <span className="hidden md:inline-flex items-center bg-surface shadow-neu-inset-sm rounded-full px-3 py-1.5 text-xs font-medium text-ink-muted">
@@ -274,101 +334,35 @@ function ActiveWishlists({
       </div>
 
       {wishlists.length === 0 ? (
-        <p className="text-ink-muted text-sm">No wishlists in flight — everything has either been released or your family hasn&apos;t started a new one yet.</p>
+        <p className="text-ink-muted text-sm">
+          No wishlists in flight — everything has either been released or your
+          family hasn&apos;t started a new one yet.
+        </p>
       ) : (
         <ul className="flex flex-col gap-5">
           {wishlists.map((w) => (
-            <li key={w.id}>
-              <div className="flex items-start gap-5 p-5 rounded-2xl bg-surface shadow-neu-inset-sm">
-                <IconWell size="sm" tone="default" depth="shallow">
-                  <PackageIcon className="h-5 w-5" />
-                </IconWell>
-                <div className="flex-1 min-w-0">
-                  <div className="flex flex-wrap items-center gap-3 mb-2">
-                    <StatusPill status={w.status} />
-                    <span className="text-xs text-ink-muted">Updated {timeAgo(w.updated_at)}</span>
-                  </div>
-                  <p className="text-ink font-medium truncate">
-                    {w.notes ?? "Untitled wishlist"}
-                  </p>
-                  <p className="text-ink-muted text-sm mt-1">
-                    <span className="text-ink font-medium tabular-nums">
-                      {formatXlmWithUnit(w.total_stroops)}
-                    </span>
-                    {w.escrow_tx_hash ? (
-                      <>
-                        <span className="mx-2">·</span>
-                        <span className="font-mono">{truncateHash(w.escrow_tx_hash)}</span>
-                      </>
-                    ) : null}
-                  </p>
-                </div>
-                {w.escrow_tx_hash ? (
-                  <a
-                    href={`https://stellar.expert/explorer/testnet/tx/${w.escrow_tx_hash}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="shrink-0 inline-flex items-center justify-center h-10 w-10 rounded-xl bg-surface shadow-neu hover:shadow-neu-hover hover:-translate-y-0.5 active:shadow-neu-inset-sm transition-all duration-300 ease-soft text-ink"
-                    aria-label="View on Stellar testnet explorer"
-                  >
-                    <ArrowUpRightIcon className="h-4 w-4" />
-                  </a>
-                ) : null}
-              </div>
-            </li>
+            <OfwWishlistRow
+              key={w.id}
+              familyId={familyId}
+              wishlistId={w.id}
+              status={w.status}
+              notes={w.notes}
+              totalStroops={w.total_stroops.toString()}
+              escrowTxHash={w.escrow_tx_hash}
+              updatedAt={w.updated_at}
+              items={w.items.map((it) => ({
+                id: it.id,
+                inventory_id: it.inventory_id,
+                inventory_name: it.inventory_name,
+                inventory_unit: it.inventory_unit,
+                quantity: it.quantity,
+                // bigint → string for the client boundary
+                price_stroops_at_add: it.price_stroops_at_add.toString(),
+              }))}
+              inventory={builderInventory}
+            />
           ))}
         </ul>
-      )}
-    </Card>
-  );
-}
-
-/* -------------------------------------------------------------------- */
-/* Activity feed                                                         */
-/* -------------------------------------------------------------------- */
-
-function ActivityFeed({
-  activity,
-}: {
-  activity: Array<{
-    id: string;
-    event_type: import("@/components/ui/StatusPill").SettlementEvent;
-    tx_hash: string;
-    amount_stroops: bigint;
-    created_at: string;
-  }>;
-}) {
-  return (
-    <Card className="p-8 md:p-10 mt-10">
-      <h2 className="font-display text-2xl md:text-3xl font-extrabold tracking-tight text-ink">
-        On-chain activity
-      </h2>
-      <p className="text-ink-muted mt-2 text-sm md:text-base mb-8">
-        Latest deposits, locks, and releases.
-      </p>
-
-      {activity.length === 0 ? (
-        <p className="text-ink-muted text-sm">Nothing on-chain yet.</p>
-      ) : (
-        <ol className="flex flex-col gap-5">
-          {activity.map((row) => (
-            <li
-              key={row.id}
-              className="flex items-center gap-4 p-4 rounded-2xl bg-surface shadow-neu-inset-sm"
-            >
-              <EventPill event={row.event_type} />
-              <div className="flex-1 min-w-0">
-                <p className="text-ink font-medium tabular-nums">
-                  {formatXlmWithUnit(row.amount_stroops)}
-                </p>
-                <p className="text-ink-muted text-xs font-mono truncate">
-                  {truncateHash(row.tx_hash, 10, 6)}
-                </p>
-              </div>
-              <span className="text-xs text-ink-muted shrink-0">{timeAgo(row.created_at)}</span>
-            </li>
-          ))}
-        </ol>
       )}
     </Card>
   );

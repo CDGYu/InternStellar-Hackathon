@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
+import { dashboardForRole } from "@/app/auth/role-routes";
 import { BackToHomeButton } from "@/components/ui/BackToHomeButton";
 import { Card } from "@/components/ui/Card";
 import { IconWell } from "@/components/ui/IconWell";
@@ -17,6 +18,8 @@ import {
   SparkleIcon,
   UserIcon,
 } from "@/components/ui/icons";
+import { loadUserProfile } from "@/lib/auth-role";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getTheme } from "@/lib/theme";
 
 export const dynamic = "force-dynamic";
@@ -28,13 +31,34 @@ export const dynamic = "force-dynamic";
  * sub-page (most) or the dark-mode toggle (one). The "menu items
  * engraved into a panel" look is intentional — it mirrors the rest of
  * the neumorphic surface vocabulary.
+ *
+ * Back button routes to the user's role-specific dashboard (the natural
+ * "one level up" from settings). Signed-out users fall back to / since
+ * they have no dashboard.
  */
-export default function SettingsPage() {
+export default async function SettingsPage() {
   const theme = getTheme();
+
+  // Resolve the back href: dashboardForRole(role) for signed-in users,
+  // "/" for signed-out. dashboardForRole already returns "/" on unknown
+  // roles, so this collapses to one expression.
+  const supabase = createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  let backHref = "/";
+  let backLabel = "Back to home";
+  if (user) {
+    const { profile } = await loadUserProfile(user.id);
+    backHref = dashboardForRole(profile?.role);
+    if (backHref !== "/") {
+      backLabel = "Back to dashboard";
+    }
+  }
 
   return (
     <main className="relative min-h-screen flex items-start justify-center px-4 py-16">
-      <BackToHomeButton href="/" label="Back to home" />
+      <BackToHomeButton href={backHref} label={backLabel} />
 
       <Card className="w-full max-w-2xl p-8 md:p-12">
         <div className="flex items-center gap-3 mb-10">

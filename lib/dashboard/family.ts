@@ -5,10 +5,15 @@ import { getSupabaseAdmin } from "@/lib/supabase-admin";
 /**
  * Server-side data loader for the Family dashboard.
  *
- * Same three-query pattern as the OFW loader but family-scoped: every row
- * is filtered by `family_id = familyId`. We trust the audit trail
- * (`settlement`) over `wishlist.total_stroops` for money totals, same as
- * the OFW dashboard.
+ * Family-scoped: every wishlist row is filtered by `family_id = familyId`.
+ * Now also returns:
+ *   - the full inventory grid (for the WishlistBuilder Add buttons)
+ *   - the family's "active draft" wishlist (status = draft|pending_approval)
+ *     with its line items, so the cart UI has everything it needs in one
+ *     server round-trip.
+ *
+ * We trust the audit trail (`settlement`) over `wishlist.total_stroops`
+ * for money totals, same as the OFW dashboard.
  *
  * Money math is in bigint. Bigint columns arrive from Supabase as strings;
  * see the same pattern in app/api/escrow/lock/route.ts.
@@ -41,6 +46,35 @@ export interface FamilySettlementRow {
   created_at: string;
 }
 
+export interface InventoryItem {
+  id: string;
+  store_id: string;
+  name: string;
+  category: string;
+  price_stroops: bigint;
+  stock: number;
+  unit: string | null;
+}
+
+export interface WishlistLineItem {
+  id: string;
+  wishlist_id: string;
+  inventory_id: string;
+  /** Snapshot — what the family sees in the cart even if inventory.name later changes. */
+  inventory_name: string;
+  inventory_unit: string | null;
+  quantity: number;
+  price_stroops_at_add: bigint;
+}
+
+export interface ActiveDraft {
+  wishlist: FamilyWishlistRow;
+  items: WishlistLineItem[];
+  /** Sum of qty × price across line items. Recomputed at read time so the
+   *  cart stays accurate even if a write didn't update wishlist.total_stroops. */
+  total_stroops: bigint;
+}
+
 export interface FamilyDashboardData {
   family: FamilyProfile;
   totals: {
@@ -51,12 +85,12 @@ export interface FamilyDashboardData {
     /** Count of wishlists not yet released or cancelled. */
     activeCount: number;
   };
-  /**
-   * All wishlists except cancelled, newest-updated first. The page renders
-   * them in two groups (in-flight vs released) but the loader keeps it as
-   * one ordered list so the grouping decision stays in the view.
-   */
+  /** All non-cancelled wishlists newest-first. The view groups them. */
   wishlists: FamilyWishlistRow[];
+  /** Most recent wishlist with status draft|pending_approval, or null. */
+  activeDraft: ActiveDraft | null;
+  /** Store's full inventory — feeds the WishlistBuilder grid. */
+  inventory: InventoryItem[];
   activity: FamilySettlementRow[];
 }
 
@@ -72,37 +106,50 @@ export async function loadFamilyDashboard(opts: {
 }): Promise<FamilyDashboardData> {
   const supabase = getSupabaseAdmin();
 
-  // ---- 1. Family profile --------------------------------------------
-  const { data: family, error: pErr } = await supabase
-    .from("profiles")
-    .select("id, display_name, country")
-    .eq("id", opts.familyId)
-    .maybeSingle();
+  // ---- 1. Family profile + wishlists + inventory (parallel) ---------
+  const [profileResult, wishlistResult, inventoryResult] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select("id, display_name, country")
+      .eq("id", opts.familyId)
+      .maybeSingle(),
+    supabase
+      .from("wishlist")
+      .select(
+        "id, status, total_stroops, notes, escrow_tx_hash, release_tx_hash, created_at, updated_at",
+      )
+      .eq("family_id", opts.familyId)
+      .order("updated_at", { ascending: false }),
+    supabase
+      .from("inventory")
+      .select("id, store_id, name, category, price_stroops, stock, unit")
+      .order("category", { ascending: true })
+      .order("name", { ascending: true }),
+  ]);
 
-  if (pErr) throw new Error(`family profile load failed: ${pErr.message}`);
+  if (profileResult.error) throw new Error(`family profile load failed: ${profileResult.error.message}`);
+  if (wishlistResult.error) throw new Error(`wishlist load failed: ${wishlistResult.error.message}`);
+  if (inventoryResult.error) throw new Error(`inventory load failed: ${inventoryResult.error.message}`);
+
+  const family = profileResult.data;
   if (!family) {
     throw new Error(
       `Family profile not found: ${opts.familyId}. Did you run db/seed.sql?`,
     );
   }
 
-  // ---- 2. Wishlists --------------------------------------------------
-  const { data: wishlistRowsRaw, error: wErr } = await supabase
-    .from("wishlist")
-    .select(
-      "id, status, total_stroops, notes, escrow_tx_hash, release_tx_hash, created_at, updated_at",
-    )
-    .eq("family_id", opts.familyId)
-    .order("updated_at", { ascending: false });
-
-  if (wErr) throw new Error(`wishlist load failed: ${wErr.message}`);
-
-  const wishlistRows = wishlistRowsRaw ?? [];
+  const wishlistRows = wishlistResult.data ?? [];
   const wishlistIds = wishlistRows.map((w) => w.id as string);
 
-  // ---- 3. Item counts + settlements (parallel) ----------------------
+  // ---- 2. Item counts + settlements + draft items (parallel) --------
   let itemCounts = new Map<string, number>();
   let settlements: FamilySettlementRow[] = [];
+
+  // Find the active draft *now* so we can fetch its items in the same
+  // parallel batch as the other dependent reads.
+  const draftRow = wishlistRows.find(
+    (w) => w.status === "draft" || w.status === "pending_approval",
+  );
 
   if (wishlistIds.length > 0) {
     const [itemsResult, settlementsResult] = await Promise.all([
@@ -139,6 +186,55 @@ export async function loadFamilyDashboard(opts: {
     }));
   }
 
+  // ---- 3. Active draft's line items (joined with inventory) ---------
+  let activeDraft: ActiveDraft | null = null;
+  if (draftRow) {
+    const { data: lineItemRows, error: liErr } = await supabase
+      .from("wishlist_item")
+      .select("id, wishlist_id, inventory_id, quantity, price_stroops_at_add, inventory:inventory_id (name, unit)")
+      .eq("wishlist_id", draftRow.id as string);
+
+    if (liErr) throw new Error(`draft items load failed: ${liErr.message}`);
+
+    const items: WishlistLineItem[] = (lineItemRows ?? []).map((row) => {
+      const inv = Array.isArray((row as any).inventory)
+        ? (row as any).inventory[0]
+        : (row as any).inventory;
+      return {
+        id: row.id as string,
+        wishlist_id: row.wishlist_id as string,
+        inventory_id: row.inventory_id as string,
+        inventory_name: (inv?.name as string) ?? "Unknown item",
+        inventory_unit: (inv?.unit as string | null) ?? null,
+        quantity: Number(row.quantity),
+        price_stroops_at_add: toBig(row.price_stroops_at_add),
+      };
+    });
+
+    // Recompute total from line items so the cart subtotal stays honest
+    // even if the wishlist.total_stroops column hasn't been resynced.
+    const total = items.reduce<bigint>(
+      (sum, it) => sum + it.price_stroops_at_add * BigInt(it.quantity),
+      0n,
+    );
+
+    activeDraft = {
+      wishlist: {
+        id: draftRow.id as string,
+        status: draftRow.status as WishlistStatus,
+        total_stroops: total,
+        notes: (draftRow.notes as string | null) ?? null,
+        escrow_tx_hash: (draftRow.escrow_tx_hash as string | null) ?? null,
+        release_tx_hash: (draftRow.release_tx_hash as string | null) ?? null,
+        item_count: items.length,
+        created_at: draftRow.created_at as string,
+        updated_at: draftRow.updated_at as string,
+      },
+      items,
+      total_stroops: total,
+    };
+  }
+
   const wishlists: FamilyWishlistRow[] = wishlistRows
     .map((w) => ({
       id: w.id as string,
@@ -163,6 +259,16 @@ export async function loadFamilyDashboard(opts: {
   const inEscrow = locked - released;
   const activeCount = wishlists.filter((w) => w.status !== "released").length;
 
+  const inventory: InventoryItem[] = (inventoryResult.data ?? []).map((row) => ({
+    id: row.id as string,
+    store_id: row.store_id as string,
+    name: row.name as string,
+    category: row.category as string,
+    price_stroops: toBig(row.price_stroops),
+    stock: Number(row.stock ?? 0),
+    unit: (row.unit as string | null) ?? null,
+  }));
+
   return {
     family: {
       id: family.id as string,
@@ -175,6 +281,8 @@ export async function loadFamilyDashboard(opts: {
       activeCount,
     },
     wishlists,
+    activeDraft,
+    inventory,
     activity: settlements.slice(0, 10),
   };
 }
