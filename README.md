@@ -60,7 +60,7 @@ npm run dev
 | Rene Vincent Cosme | Backend Engineer | @RVBCosme |
 | Gerardo Razon III | Frontend Engineer | @Inuyashatrades |
 | Charles Derick Yu | Product Lead | @CDGYu |
-| Prince Edwin Zablan | Full-Stack Engineer | @zprinceedwin |
+| Prince Edwin Zablan | BlockChain Engineer | @zprinceedwin |
 
 ## 📜 License
-MIT
+This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
