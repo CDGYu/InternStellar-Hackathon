@@ -4,7 +4,7 @@ import { IconWell } from "@/components/ui/IconWell";
 import { SparkleIcon, ArrowUpRightIcon } from "@/components/ui/icons";
 
 /**
- * Marketing / entry page. Always shows Sign in / Register — never auto-routes
+ * Marketing / entry page. Always shows Log in / Register — never auto-routes
  * a signed-in caller to their dashboard, since the landing is a shared entry
  * point we want consistent for everyone.
  */
@@ -32,7 +32,7 @@ export default function Home() {
 
         <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
           <ButtonLink href="/login" variant="primary" size="lg" className="w-full sm:w-auto">
-            Sign in
+            Log in
             <ArrowUpRightIcon className="h-4 w-4" />
           </ButtonLink>
           <ButtonLink
