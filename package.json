@@ -1,0 +1,30 @@
+{
+  "name": "internstellar-hackathon",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "fund-test-account": "npx tsx scripts/fund-test-account.ts",
+    "verify-stellar": "npx tsx scripts/verify-stellar-connection.ts",
+    "test:stellar-lib": "npx tsx scripts/_test-stellar-lib.ts",
+    "test:escrow-wiring": "npx tsx scripts/_test-escrow-wiring.ts"
+  },
+  "dependencies": {
+    "@stellar/stellar-sdk": "12.3.0",
+    "@supabase/supabase-js": "2.45.4",
+    "next": "14.2.18",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "20.12.12",
+    "@types/react": "18.3.3",
+    "@types/react-dom": "18.3.0",
+    "typescript": "5.4.5"
+  },
+  "engines": {
+    "node": ">=20.6.0"
+  }
+}

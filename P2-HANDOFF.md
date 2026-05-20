@@ -21,6 +21,29 @@ For P2 wiring API routes (`POST /api/deposit` and later escrow routes) to the In
 | Explorer | https://stellar.expert/explorer/testnet/contract/CCNHZGSUWCQXWFVU4IGFRNC5FWYJTGUPOAIHV7KNRSB7KLWVJNPQ43OE |
 | Lab | https://lab.stellar.org/r/testnet/contract/CCNHZGSUWCQXWFVU4IGFRNC5FWYJTGUPOAIHV7KNRSB7KLWVJNPQ43OE |
 
+## Deployed Contract (Day 3 Escrow)
+
+| Key | Value |
+|---|---|
+| Contract ID | `CAWU54VCOTXACW5RDQ23DMHMKCFHCRICGEHIGGCDL4GL4X6NP2ZBMPID` |
+| Wasm Hash | `436ca76aac36ad45beb39249e01d0a8bbb8614ced97c690c7f32b80062c3bc3b` |
+| Deploy tx | `64e46aaede316270140f2121436e2078bdcd198e001d3ee962bbc39bdaf795a2` |
+| Source code | `internstellar-contract/contracts/internstellar/src/lib.rs` |
+| Explorer | https://stellar.expert/explorer/testnet/contract/CAWU54VCOTXACW5RDQ23DMHMKCFHCRICGEHIGGCDL4GL4X6NP2ZBMPID |
+| Lab | https://lab.stellar.org/r/testnet/contract/CAWU54VCOTXACW5RDQ23DMHMKCFHCRICGEHIGGCDL4GL4X6NP2ZBMPID |
+
+**Verified on testnet (escrow smoke test):**
+
+```text
+deposit_and_split tx: aa6f5a2c31db6f5018234768169f7e3a40583bd3ffac1942014516662a39a9ca
+deposit return: ["6000000000","3000000000","1000000000"]
+get_balances after deposit: ["6000000000","3000000000","1000000000"]
+lock_escrow tx: 5277952024b0bf2e9dc9ddfb81043827fdbef3b96bd4a4cb5d7dafff63628791
+lock_escrow return: 1
+get_balances after lock: ["6000000000","1000000000","1000000000"]
+release_escrow tx: 7caa0268e0a90961653a3b5a86ab475dde0ceca381ed47500e9a4677a4e0d2ff
+```
+
 ## Money Convention
 
 All amounts are integer base units. 1 XLM = 10_000_000 base units (Stellar stroops convention).
@@ -104,16 +127,37 @@ Suggestions for `POST /api/deposit`:
   - the per-call shares from the contract response
   - the running balances (after we add `get_balances` on Day 3) so the UI can show "Grocery wallet: ₱600" without a second round trip
 - Treat the contract ID as configuration:
-  - `process.env.STELLAR_CONTRACT_ID` for the server
+  - `process.env.NEXT_PUBLIC_CONTRACT_ID` for Rene's current Next.js API routes
   - never hardcode in app code
 
-## Coming In Day 3
+## Day 3 Escrow Contract Additions
 
-Same contract will gain:
+The same contract now has the API surface Rene's Day 3 routes expect:
 
-- `lock_escrow(family, amount)` — moves grocery funds to held escrow entry.
-- `release_escrow(escrow_id, confirmation)` — pays held funds to merchant address.
-- `get_balances(user)` — read-only view returning the three running balances.
+```rust
+pub fn get_balances(env: Env, user: Address) -> (i128, i128, i128)
+pub fn lock_escrow(env: Env, family: Address, amount: i128) -> u32
+pub fn release_escrow(env: Env, escrow_id: u32)
+```
+
+`lock_escrow` moves funds out of the family's grocery bucket into an escrow record and returns the contract escrow id. `release_escrow` marks that escrow record released. This demo version does not transfer a Stellar asset to a merchant yet; it protects the Golden Path by proving the lock/release state transition on-chain first.
+
+**Auth model:** both `lock_escrow` and `release_escrow` call `family.require_auth()`. For Rene's server-signed API flow, seed the demo family's `profiles.stellar_public_key` with the public key for `STELLAR_DEMO_SECRET_KEY`.
+
+**Escrow storage shape:**
+
+```rust
+DataKey::NextEscrowId -> u32
+DataKey::Escrow(u32)  -> Escrow { family: Address, amount: i128, released: bool }
+```
+
+**Escrow panic strings for API mapping:**
+
+- `escrow amount must be positive`
+- `insufficient grocery balance`
+- `escrow id overflow`
+- `escrow not found`
+- `escrow already released`
 
 Planned API surface for P2:
 
@@ -121,7 +165,7 @@ Planned API surface for P2:
 - `POST /api/escrow/release`
 - `GET  /api/balances/:user`
 
-Contract ID will stay the same unless we deliberately redeploy.
+Use the Day 3 contract ID above in `.env.local` as `NEXT_PUBLIC_CONTRACT_ID`.
 
 ## Test Identity
 

@@ -154,3 +154,129 @@ fn remainder_trick_preserves_total_for_uneven_split() {
     assert_eq!(emerg, 340);
     assert_eq!(util + groc + emerg, total);
 }
+
+#[test]
+fn get_balances_returns_zeroes_for_new_user() {
+    let (env, contract_id) = new_contract();
+    let client = ContractClient::new(&env, &contract_id);
+
+    let user = Address::generate(&env);
+
+    let (util, groc, emerg) = client.get_balances(&user);
+
+    assert_eq!(util, 0);
+    assert_eq!(groc, 0);
+    assert_eq!(emerg, 0);
+}
+
+#[test]
+fn get_balances_returns_running_bucket_balances() {
+    let (env, contract_id) = new_contract();
+    let client = ContractClient::new(&env, &contract_id);
+
+    let user = Address::generate(&env);
+    client.deposit_and_split(&user, &(1000 * ONE_UNIT), &60u32, &30u32, &10u32);
+
+    let (util, groc, emerg) = client.get_balances(&user);
+
+    assert_eq!(util, 600 * ONE_UNIT);
+    assert_eq!(groc, 300 * ONE_UNIT);
+    assert_eq!(emerg, 100 * ONE_UNIT);
+}
+
+#[test]
+fn lock_escrow_moves_grocery_funds_into_held_escrow() {
+    let (env, contract_id) = new_contract();
+    let client = ContractClient::new(&env, &contract_id);
+
+    let family = Address::generate(&env);
+    client.deposit_and_split(&family, &(1000 * ONE_UNIT), &60u32, &30u32, &10u32);
+
+    let escrow_id = client.lock_escrow(&family, &(200 * ONE_UNIT));
+
+    assert_eq!(escrow_id, 1);
+    let (_util, groc, _emerg) = client.get_balances(&family);
+    assert_eq!(groc, 100 * ONE_UNIT);
+
+    env.as_contract(&contract_id, || {
+        let escrow: Escrow = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Escrow(escrow_id))
+            .unwrap();
+
+        assert_eq!(escrow.family, family);
+        assert_eq!(escrow.amount, 200 * ONE_UNIT);
+        assert!(!escrow.released);
+    });
+}
+
+#[test]
+#[should_panic(expected = "insufficient grocery balance")]
+fn lock_escrow_rejects_amount_above_grocery_balance() {
+    let (env, contract_id) = new_contract();
+    let client = ContractClient::new(&env, &contract_id);
+
+    let family = Address::generate(&env);
+    client.deposit_and_split(&family, &(1000 * ONE_UNIT), &60u32, &30u32, &10u32);
+
+    client.lock_escrow(&family, &(301 * ONE_UNIT));
+}
+
+#[test]
+#[should_panic(expected = "escrow amount must be positive")]
+fn lock_escrow_rejects_zero_amount() {
+    let (env, contract_id) = new_contract();
+    let client = ContractClient::new(&env, &contract_id);
+
+    let family = Address::generate(&env);
+
+    client.lock_escrow(&family, &0i128);
+}
+
+#[test]
+fn release_escrow_marks_existing_escrow_released() {
+    let (env, contract_id) = new_contract();
+    let client = ContractClient::new(&env, &contract_id);
+
+    let family = Address::generate(&env);
+    client.deposit_and_split(&family, &(1000 * ONE_UNIT), &60u32, &30u32, &10u32);
+    let escrow_id = client.lock_escrow(&family, &(200 * ONE_UNIT));
+
+    client.release_escrow(&escrow_id);
+
+    env.as_contract(&contract_id, || {
+        let escrow: Escrow = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Escrow(escrow_id))
+            .unwrap();
+
+        assert!(escrow.released);
+    });
+}
+
+#[test]
+#[should_panic(expected = "escrow already released")]
+fn release_escrow_rejects_double_release() {
+    let (env, contract_id) = new_contract();
+    let client = ContractClient::new(&env, &contract_id);
+
+    let family = Address::generate(&env);
+    client.deposit_and_split(&family, &(1000 * ONE_UNIT), &60u32, &30u32, &10u32);
+    let escrow_id = client.lock_escrow(&family, &(200 * ONE_UNIT));
+
+    client.release_escrow(&escrow_id);
+    client.release_escrow(&escrow_id);
+}
+
+#[test]
+#[should_panic(expected = "escrow not found")]
+fn release_escrow_rejects_unknown_id() {
+    let (env, contract_id) = new_contract();
+    let client = ContractClient::new(&env, &contract_id);
+
+    let missing_escrow_id = 42u32;
+
+    client.release_escrow(&missing_escrow_id);
+}

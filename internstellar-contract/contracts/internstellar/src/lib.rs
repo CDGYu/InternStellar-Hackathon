@@ -6,10 +6,20 @@ use soroban_sdk::{contract, contractimpl, contracttype, Address, Env};
 // nesting maps, which is closer to how Soroban examples model per-account state.
 #[derive(Clone)]
 #[contracttype]
-pub enum DataKey {
+enum DataKey {
     Util(Address),
     Groc(Address),
     Emerg(Address),
+    NextEscrowId,
+    Escrow(u32),
+}
+
+#[derive(Clone)]
+#[contracttype]
+struct Escrow {
+    family: Address,
+    amount: i128,
+    released: bool,
 }
 
 #[contract]
@@ -62,6 +72,80 @@ impl Contract {
 
         (util_share, groc_share, emerg_share)
     }
+
+    pub fn get_balances(env: Env, user: Address) -> (i128, i128, i128) {
+        let util = read_balance(&env, DataKey::Util(user.clone()));
+        let groc = read_balance(&env, DataKey::Groc(user.clone()));
+        let emerg = read_balance(&env, DataKey::Emerg(user));
+
+        (util, groc, emerg)
+    }
+
+    pub fn lock_escrow(env: Env, family: Address, amount: i128) -> u32 {
+        family.require_auth();
+
+        if amount <= 0 {
+            panic!("escrow amount must be positive");
+        }
+
+        let groc_key = DataKey::Groc(family.clone());
+        let groc_balance = read_balance(&env, groc_key.clone());
+        if groc_balance < amount {
+            panic!("insufficient grocery balance");
+        }
+
+        let escrow_id = next_escrow_id(&env);
+        let remaining_groc = groc_balance
+            .checked_sub(amount)
+            .expect("groc underflow");
+        let following_id = escrow_id
+            .checked_add(1)
+            .expect("escrow id overflow");
+
+        env.storage().persistent().set(&groc_key, &remaining_groc);
+        env.storage()
+            .persistent()
+            .set(&DataKey::NextEscrowId, &following_id);
+        env.storage().persistent().set(
+            &DataKey::Escrow(escrow_id),
+            &Escrow {
+                family,
+                amount,
+                released: false,
+            },
+        );
+
+        escrow_id
+    }
+
+    pub fn release_escrow(env: Env, escrow_id: u32) {
+        let escrow_key = DataKey::Escrow(escrow_id);
+        let mut escrow: Escrow = env
+            .storage()
+            .persistent()
+            .get(&escrow_key)
+            .unwrap_or_else(|| panic!("escrow not found"));
+
+        escrow.family.require_auth();
+
+        if escrow.released {
+            panic!("escrow already released");
+        }
+
+        escrow.released = true;
+        env.storage().persistent().set(&escrow_key, &escrow);
+    }
+}
+
+fn read_balance(env: &Env, key: DataKey) -> i128 {
+    env.storage().persistent().get(&key).unwrap_or(0)
+}
+
+fn next_escrow_id(env: &Env) -> u32 {
+    env.storage()
+        .persistent()
+        .get(&DataKey::NextEscrowId)
+        .unwrap_or(1)
 }
 
 mod test;
