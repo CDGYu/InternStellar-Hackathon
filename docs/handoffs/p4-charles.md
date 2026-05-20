@@ -3,9 +3,9 @@
 
 ---
 
-## 📌 Current Action Items (Day 3 Gate Blockers)
+## 📌 Current Action Items (Day 4 Gate Blockers)
 
-Last updated: 2026-05-20. The Day 3 escrow contract is deployed and verified on testnet. Three things are blocking the end-to-end gate right now and they all sit on you. All three are quick.
+Last updated: 2026-05-20 23:14 +08:00. The Day 4 escrow contract is deployed and verified on testnet. Four things are blocking the app-level end-to-end gate right now; all are data/config tasks.
 
 ### 1. 🟥 SECURITY — Rotate the Supabase service-role key
 
@@ -36,9 +36,25 @@ update profiles
 
 Better: also extend `db/seed.sql` so the reset-demo script writes this automatically.
 
-### After all three are done
+### 4. Seed `profiles.stellar_public_key` for the demo store
 
-Ping Rene to rerun his end-to-end curl test (recipe in `docs/from-team/rene-day3-summary.md` §8). When the lock → release round-trip completes against the new contract id `CAWU54VCOTXACW5RDQ23DMHMKCFHCRICGEHIGGCDL4GL4X6NP2ZBMPID`, the Day 3 gate is officially green.
+Day 4 changed the contract from `lock_escrow(family, amount)` to `lock_escrow(family, store, amount)`. Rene's API now needs a store Stellar address to pass into the contract. The store row in `profiles` must therefore have a non-null `stellar_public_key`.
+
+Use the store test identity from the Day 4 smoke test unless the team generates a different store key:
+
+```sql
+update profiles
+   set stellar_public_key = 'GDPAWQFVRSXPLRPMWDCV562AVEHK4TWXZQYB35CCCNSPT5UVLJX7TCND'
+ where id = '<demo store profile id>';
+```
+
+Also make sure demo wishlist/inventory rows can identify which store owns the order, so Rene can derive `storeAddress` from the wishlist path before calling `lockEscrow({ familyAddress, storeAddress, amountStroops })`.
+
+Better: extend `db/seed.sql` so the demo store key is written automatically during reset.
+
+### After all four are done
+
+Ping Rene to rerun his end-to-end curl test after he updates the API to the Day 4 contract shape. When the lock → release round-trip completes against contract id `CB3VGM6SU3RRJLRJMT7CRX36ARKCH222ZKGKVPMS2DU5MIAHKUFZGRDF` and `get_balances(store)` shows the credited grocery amount, the Day 4 integration gate is green.
 
 ---
 
