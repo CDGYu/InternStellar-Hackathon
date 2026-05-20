@@ -38,6 +38,7 @@ yarn-error.log*
 next-env.d.ts
 
 # local env files (NEVER commit secrets; .env.example IS committed)
+.env
 .env*.local
 
 .CLAUDE.md
