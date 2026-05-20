@@ -1,0 +1,87 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Design tokens as CSS variables so every neumorphic surface, text color,
+ * and shadow tuple can shift with the `.dark` class on <html> without
+ * having to litter `dark:` variants across every component.
+ *
+ * Colors are stored as space-separated RGB triplets so Tailwind's
+ * `rgb(var(--token) / <alpha-value>)` opacity-modifier syntax works
+ * (see tailwind.config.ts).
+ *
+ * Shadow channels are stored separately because neumorphism's shadows
+ * need a deliberate re-tuning between light and dark, not just an
+ * inverted color — light mode has soft blue-grey shadows on a near-white
+ * surface; dark mode has hard black shadows with a barely-perceptible
+ * white highlight on a dark cool-grey surface.
+ */
+:root {
+  /* Surface + ink */
+  --color-surface: 224 229 236;          /* #E0E5EC */
+  --color-ink: 61 72 82;                 /* #3D4852 */
+  --color-ink-muted: 107 114 128;        /* #6B7280 */
+  --color-ink-placeholder: 160 174 192;  /* #A0AEC0 */
+
+  /* Accents (kept stable across themes) */
+  --color-accent: 108 99 255;            /* #6C63FF */
+  --color-accent-light: 139 132 255;     /* #8B84FF */
+  --color-accent-teal: 56 178 172;       /* #38B2AC */
+
+  /* Shadow channels: rgb triplet + alpha, used by the neu* utilities */
+  --neu-shadow-dark-rgb: 163, 177, 198;  /* cool blue-grey */
+  --neu-shadow-light-rgb: 255, 255, 255;
+  --neu-shadow-dark-alpha-1: 0.6;
+  --neu-shadow-dark-alpha-2: 0.7;
+  --neu-shadow-light-alpha-1: 0.5;
+  --neu-shadow-light-alpha-2: 0.6;
+}
+
+.dark {
+  /* Surface + ink — deep cool grey with light text */
+  --color-surface: 30 38 49;             /* #1E2631 */
+  --color-ink: 226 232 240;              /* #E2E8F0 */
+  --color-ink-muted: 148 158 170;        /* #94A0AE */
+  --color-ink-placeholder: 100 110 124;  /* #646E7C */
+
+  /* Accent stays the same — already passes contrast on the dark surface */
+  --color-accent: 139 132 255;           /* shift one step lighter for AA */
+  --color-accent-light: 168 161 255;
+  --color-accent-teal: 79 209 197;
+
+  /* Dark neumorphism inverts the contrast ratio of the two shadow sides:
+     the "dark" side becomes near-black with strong alpha, the "light"
+     side becomes a faint white highlight. Together they read as the
+     element being lit from above-left, just like in light mode. */
+  --neu-shadow-dark-rgb: 0, 0, 0;
+  --neu-shadow-light-rgb: 80, 92, 108;   /* not pure white — a cool lift */
+  --neu-shadow-dark-alpha-1: 0.55;
+  --neu-shadow-dark-alpha-2: 0.65;
+  --neu-shadow-light-alpha-1: 0.20;
+  --neu-shadow-light-alpha-2: 0.25;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: rgb(var(--color-surface));
+  color: rgb(var(--color-ink));
+  font-family: theme("fontFamily.sans");
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Visible focus ring on every interactive element, sitting inside the
+ * neumorphic shadow well so it reads as part of the same surface.
+ * Components opt into different rings with `focus-visible:` classes
+ * directly when they need a non-default treatment. */
+:where(button, a, input, select, textarea):focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px rgb(var(--color-surface)),
+    0 0 0 4px rgb(var(--color-accent));
+}
