@@ -96,6 +96,34 @@ on conflict (id) do update
       country      = excluded.country;
 
 -- ============================================================
+-- 3b. Seed Stellar addresses for the demo profiles.
+--     P1's Day 4 contract calls family.require_auth() on lock/release,
+--     and release credits the store's grocery bucket — so both family
+--     and store rows need a stellar_public_key.
+--
+--     OFW + Family share the demo signer's address because the server
+--     signs deposit/lock/release with STELLAR_DEMO_SECRET_KEY. The store
+--     MUST have a DISTINCT address, otherwise lock_escrow panics with
+--     "family cannot be store". The store doesn't sign anything
+--     (contract only requires family.require_auth), so we generated a
+--     random valid testnet pubkey for it and discarded the secret.
+--
+--     If you regenerate the demo signer, you must also regenerate the
+--     store address so the two stay distinct.
+-- ============================================================
+update profiles
+   set stellar_public_key = 'GAC3WCB5ZZ5GVWDOL4XCA3UJU5ZQ4CCAODREOEDLJB5UT4Q6BZDKPYUK'
+ where id in (
+   '11111111-1111-1111-1111-111111111111',  -- Auntie Maria (OFW)
+   '22222222-2222-2222-2222-222222222222'   -- Lola Cora (Family)
+ );
+
+-- Store gets a distinct testnet pubkey (secret discarded; store never signs).
+update profiles
+   set stellar_public_key = 'GCDBRYRNO6I5HHJJGKYBHJZB7JUFQ2ZA7HPIKKGBEMXG7J633QF6QBY5'
+ where id = '33333333-3333-3333-3333-333333333333';  -- Aling Nena (Store)
+
+-- ============================================================
 -- 4. Inventory — Aling Nena's stock (prices in stroops)
 --    1 XLM = 10,000,000 stroops.  Stock = 50 each.
 -- ============================================================

@@ -1,9 +1,9 @@
 /**
- * Wire-up smoke test for the Day 3 escrow layer.
+ * Wire-up smoke test for the Day 3-4 escrow + deposit + balances layer.
  *
- * Verifies the contract module + helper modules load and that the contract
- * functions THROW the right errors when env is incomplete. Does NOT submit a
- * real transaction (that's the operator's end-to-end gate, not a unit test).
+ * Verifies modules load and that the contract functions THROW the right
+ * errors when env / args are wrong. Does NOT submit a real transaction
+ * (that's the operator's end-to-end gate, not a unit test).
  *
  * Run:  npm run test:escrow-wiring
  */
@@ -12,6 +12,7 @@ import { strict as assert } from "node:assert";
 import {
   ContractCallError,
   ContractNotConfiguredError,
+  depositAndSplit,
   lockEscrow,
 } from "../lib/stellar/contract";
 
@@ -30,24 +31,46 @@ async function check(label: string, fn: () => Promise<void>) {
   }
 }
 
+function withEnv() {
+  process.env.STELLAR_RPC_URL = "https://soroban-testnet.stellar.org";
+  process.env.NEXT_PUBLIC_CONTRACT_ID =
+    process.env.NEXT_PUBLIC_CONTRACT_ID ?? "C".padEnd(56, "A");
+  process.env.STELLAR_DEMO_SECRET_KEY =
+    process.env.STELLAR_DEMO_SECRET_KEY ?? "S".padEnd(56, "A");
+}
+
 async function main() {
   console.log("lib/stellar/contract");
 
   await check("lockEscrow rejects amountStroops <= 0", async () => {
-    // Provide enough env so we get past loadConfig into the validation.
-    process.env.STELLAR_RPC_URL = "https://soroban-testnet.stellar.org";
-    process.env.NEXT_PUBLIC_CONTRACT_ID =
-      process.env.NEXT_PUBLIC_CONTRACT_ID ?? "C".padEnd(56, "A");
-    process.env.STELLAR_DEMO_SECRET_KEY =
-      process.env.STELLAR_DEMO_SECRET_KEY ?? "S".padEnd(56, "A");
-
+    withEnv();
     await assert.rejects(
       () =>
         lockEscrow({
           familyAddress: "G".padEnd(56, "A"),
+          storeAddress: "G".padEnd(56, "B"),
           amountStroops: 0n,
         }),
       ContractCallError,
+    );
+  });
+
+  await check("lockEscrow rejects family == store (no round trip)", async () => {
+    withEnv();
+    const same = "G".padEnd(56, "C");
+    await assert.rejects(
+      () =>
+        lockEscrow({
+          familyAddress: same,
+          storeAddress: same,
+          amountStroops: 100n,
+        }),
+      (e: unknown) => {
+        return (
+          e instanceof ContractCallError &&
+          e.reason === "family cannot be store"
+        );
+      },
     );
   });
 
@@ -63,6 +86,7 @@ async function main() {
           () =>
             lockEscrow({
               familyAddress: "G".padEnd(56, "A"),
+              storeAddress: "G".padEnd(56, "B"),
               amountStroops: 100n,
             }),
           ContractNotConfiguredError,
@@ -73,6 +97,41 @@ async function main() {
       }
     },
   );
+
+  await check("depositAndSplit rejects pct sum != 100", async () => {
+    withEnv();
+    await assert.rejects(
+      () =>
+        depositAndSplit({
+          fromAddress: "G".padEnd(56, "A"),
+          totalStroops: 10_000_000n,
+          pctUtil: 50,
+          pctGroc: 30,
+          pctEmerg: 10, // sums to 90
+        }),
+      (e: unknown) => {
+        return (
+          e instanceof ContractCallError &&
+          e.reason === "percentages must sum to 100"
+        );
+      },
+    );
+  });
+
+  await check("depositAndSplit rejects totalStroops <= 0", async () => {
+    withEnv();
+    await assert.rejects(
+      () =>
+        depositAndSplit({
+          fromAddress: "G".padEnd(56, "A"),
+          totalStroops: 0n,
+          pctUtil: 50,
+          pctGroc: 30,
+          pctEmerg: 20,
+        }),
+      ContractCallError,
+    );
+  });
 
   console.log("lib/api/errors");
   await check("err() returns NextResponse with correct shape", async () => {
@@ -91,6 +150,18 @@ async function main() {
   await check("app/api/escrow/release/route exports POST", async () => {
     const mod = await import("../app/api/escrow/release/route");
     assert.equal(typeof mod.POST, "function");
+  });
+  await check("app/api/wishlist/route exports POST", async () => {
+    const mod = await import("../app/api/wishlist/route");
+    assert.equal(typeof mod.POST, "function");
+  });
+  await check("app/api/deposit/route exports POST", async () => {
+    const mod = await import("../app/api/deposit/route");
+    assert.equal(typeof mod.POST, "function");
+  });
+  await check("app/api/balances/[user_id]/route exports GET", async () => {
+    const mod = await import("../app/api/balances/[user_id]/route");
+    assert.equal(typeof mod.GET, "function");
   });
 
   console.log(`\n${passed} passed, ${failed} failed`);

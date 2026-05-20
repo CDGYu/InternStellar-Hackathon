@@ -78,9 +78,12 @@ export async function POST(req: Request): Promise<NextResponse> {
     });
   }
 
+  // Load items joined to inventory so we can (a) sum the total and (b)
+  // derive the destination store. All items on one wishlist must come from
+  // the same store for the Day 4 demo — we surface a 409 if not.
   const { data: items, error: iErr } = await supabase
     .from("wishlist_item")
-    .select("quantity, price_stroops_at_add")
+    .select("quantity, price_stroops_at_add, inventory:inventory_id(store_id)")
     .eq("wishlist_id", wishlist_id);
 
   if (iErr) {
@@ -91,9 +94,39 @@ export async function POST(req: Request): Promise<NextResponse> {
     return err(409, "wishlist_empty", "Wishlist has no items to escrow.");
   }
 
-  const grocery_stroops = items.reduce<bigint>((sum, row) => {
-    const price = BigInt(row.price_stroops_at_add as string | number);
-    const qty = BigInt(row.quantity as number);
+  // Inferred shape from the join above. Supabase types this as either an
+  // object or an array depending on the FK definition, so we normalise.
+  type ItemRow = {
+    quantity: number;
+    price_stroops_at_add: string | number;
+    inventory: { store_id: string } | { store_id: string }[] | null;
+  };
+
+  function getStoreId(row: ItemRow): string | null {
+    const inv = row.inventory;
+    if (!inv) return null;
+    if (Array.isArray(inv)) return inv[0]?.store_id ?? null;
+    return inv.store_id ?? null;
+  }
+
+  const storeIds = new Set<string>();
+  for (const row of items as ItemRow[]) {
+    const sid = getStoreId(row);
+    if (sid) storeIds.add(sid);
+  }
+
+  if (storeIds.size === 0) {
+    return err(500, "db_error", "Could not resolve store from wishlist items.");
+  }
+  if (storeIds.size > 1) {
+    return err(409, "multiple_stores", "Wishlist items span multiple stores. Day 4 demo is single-store only.");
+  }
+
+  const storeId = [...storeIds][0];
+
+  const grocery_stroops = (items as ItemRow[]).reduce<bigint>((sum, row) => {
+    const price = BigInt(row.price_stroops_at_add);
+    const qty = BigInt(row.quantity);
     return sum + price * qty;
   }, 0n);
 
@@ -101,18 +134,28 @@ export async function POST(req: Request): Promise<NextResponse> {
     return err(409, "wishlist_total_zero", "Computed escrow amount is zero.");
   }
 
-  const { data: profile, error: pErr } = await supabase
+  // Family + store stellar addresses
+  const { data: profiles, error: pErr } = await supabase
     .from("profiles")
-    .select("stellar_public_key")
-    .eq("id", family_id)
-    .maybeSingle();
+    .select("id, stellar_public_key")
+    .in("id", [family_id, storeId]);
 
   if (pErr) {
-    console.error("[escrow/lock] profile load failed:", pErr);
-    return err(500, "db_error", "Could not load family profile.");
+    console.error("[escrow/lock] profiles load failed:", pErr);
+    return err(500, "db_error", "Could not load family/store profiles.");
   }
-  if (!profile?.stellar_public_key) {
+
+  const familyAddress = profiles?.find((p) => p.id === family_id)?.stellar_public_key ?? null;
+  const storeAddress = profiles?.find((p) => p.id === storeId)?.stellar_public_key ?? null;
+
+  if (!familyAddress) {
     return err(400, "family_address_not_set", "Family profile is missing stellar_public_key.");
+  }
+  if (!storeAddress) {
+    return err(400, "store_address_not_set", "Store profile is missing stellar_public_key.");
+  }
+  if (familyAddress === storeAddress) {
+    return err(400, "family_cannot_be_store", "Family and store cannot be the same address.");
   }
 
   // ---- 4. Call the contract ---------------------------------------
@@ -120,7 +163,8 @@ export async function POST(req: Request): Promise<NextResponse> {
   let escrowId: unknown;
   try {
     const result = await lockEscrow({
-      familyAddress: profile.stellar_public_key,
+      familyAddress,
+      storeAddress,
       amountStroops: grocery_stroops,
     });
     txHash = result.txHash;
@@ -139,9 +183,9 @@ export async function POST(req: Request): Promise<NextResponse> {
   }
 
   // ---- 5. Persist Supabase state (escrow_tx_hash + settlement) -----
-  // Stash the escrow id alongside notes so release can read it back. See
-  // DAY3-P2.md "Plan Revisions" #3 — this is temporary until P1 confirms
-  // whether the tx hash is sufficient on its own.
+  // Stash the contract's escrow id in notes so /api/escrow/release can read
+  // it back. Schema is LOCKED (CLAUDE.md) so we can't add a column without
+  // a team sync — see DAY3-P2.md Plan Revisions #3.
   const notes_with_id =
     escrowId !== undefined && escrowId !== null
       ? `${wishlist.notes ?? ""}\n__escrow_ret__:${JSON.stringify(escrowId)}`.trim()
@@ -160,8 +204,6 @@ export async function POST(req: Request): Promise<NextResponse> {
 
   if (updErr) {
     console.error("[escrow/lock] wishlist update failed AFTER successful contract call:", updErr);
-    // Contract call succeeded but DB write didn't — surface loudly so P4 can
-    // reconcile from on-chain state. We do NOT roll back the chain call.
     return err(500, "db_error", "Escrow locked on-chain but DB update failed. Reconcile from settlement.", {
       tx_hash: txHash,
     });
@@ -176,17 +218,23 @@ export async function POST(req: Request): Promise<NextResponse> {
 
   if (setErr) {
     console.error("[escrow/lock] settlement insert failed:", setErr);
-    // Same posture: chain truth + wishlist row are good; we just lost the
-    // audit row. Don't fail the request — log and continue. P4's audit job
-    // can backfill from on-chain events.
+    // Don't fail the request — chain truth + wishlist row are good.
   }
 
   // ---- 6. Respond -------------------------------------------------
+  // TODO (Day 4+): Listen for emitted events from the contract:
+  //   "deposit"  = (family, util_share, groc_share, emerg_share)
+  //   "esc_lock" = (family, store, escrow_id, amount)
+  //   "esc_rel"  = (escrow_id, family, store, amount)
+  // Read via Soroban RPC getEvents (filter contractIds: [NEXT_PUBLIC_CONTRACT_ID]).
+  // Useful for: a receipts view, and avoiding a UI polling loop.
   return ok({
     escrow_id: wishlist_id,
+    contract_escrow_id: escrowId ?? null,
     tx_hash: txHash,
     status: "locked",
     amount_stroops: grocery_stroops.toString(),
+    store_id: storeId,
     message: "Escrow locked successfully. Store can now prepare delivery.",
   });
 }
