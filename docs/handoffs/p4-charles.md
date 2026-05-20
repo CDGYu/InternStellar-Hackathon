@@ -1,5 +1,44 @@
-# InternStellar — P4 Field Guide
+# InternStellar — P4 Field Guide (Charles)
 ### Data + Integration Glue + PM · 7-Day Hackathon
+
+---
+
+## 📌 Current Action Items (Day 3 Gate Blockers)
+
+Last updated: 2026-05-20. The Day 3 escrow contract is deployed and verified on testnet. Three things are blocking the end-to-end gate right now and they all sit on you. All three are quick.
+
+### 1. 🟥 SECURITY — Rotate the Supabase service-role key
+
+The previous `.env` was committed to the repo with a real `SUPABASE_SERVICE_ROLE_KEY` inside. I've removed `.env` from the branch and replaced it with `.env.example` (placeholders only), and `.gitignore` now blocks `.env`. **But the leaked key still works** — anyone who saw the repo history has it.
+
+Action:
+- In Supabase dashboard → Project Settings → API → "Reset" the service_role key.
+- Update `.env.local` with the new key.
+- Share the new key with the team out-of-band (1Password / pinned DM), not in the repo.
+
+### 2. Run `db/grants.sql` in the Supabase SQL editor
+
+Rene found that the service_role currently has no table privileges, so every API route returns `500 db_error / permission denied`. The fix is `db/grants.sql` (idempotent, one-shot). It must be run by the Supabase superuser, which is what the SQL editor runs as — so paste-and-run.
+
+Why: Supabase normally auto-grants public-schema privileges to `service_role`, but this project's tables were created in a way that bypassed that. Full repro in `docs/from-team/rene-day3-summary.md` §10.
+
+### 3. Seed `profiles.stellar_public_key` for the demo family
+
+The escrow contract's `lock_escrow` and `release_escrow` both call `family.require_auth()`. For Rene's server-signed flow to work, the demo family row in `profiles` must have a `stellar_public_key` that matches the public key of `STELLAR_DEMO_SECRET_KEY`.
+
+For now, use the existing testnet identity:
+
+```sql
+update profiles
+   set stellar_public_key = 'GAC3WCB5ZZ5GVWDOL4XCA3UJU5ZQ4CCAODREOEDLJB5UT4Q6BZDKPYUK'
+ where id = '22222222-2222-2222-2222-222222222222';
+```
+
+Better: also extend `db/seed.sql` so the reset-demo script writes this automatically.
+
+### After all three are done
+
+Ping Rene to rerun his end-to-end curl test (recipe in `docs/from-team/rene-day3-summary.md` §8). When the lock → release round-trip completes against the new contract id `CAWU54VCOTXACW5RDQ23DMHMKCFHCRICGEHIGGCDL4GL4X6NP2ZBMPID`, the Day 3 gate is officially green.
 
 ---
 

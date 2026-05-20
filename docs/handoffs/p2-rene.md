@@ -1,6 +1,31 @@
-# P2 — Contract Handoff
+# P2 — Contract Handoff (Rene)
 
 For P2 wiring API routes (`POST /api/deposit` and later escrow routes) to the InternStellar Soroban contract.
+
+## 📌 Current Action Items (Day 3 → Day 4)
+
+Last updated: 2026-05-20. The Day 3 escrow contract is deployed and verified on testnet. Action items for you, in order:
+
+1. **Update `.env.local`** with the new escrow contract id:
+   ```
+   NEXT_PUBLIC_CONTRACT_ID=CAWU54VCOTXACW5RDQ23DMHMKCFHCRICGEHIGGCDL4GL4X6NP2ZBMPID
+   ```
+   (Old Day 2 contract id `CCNHZGSUWCQXWFVU4IGFRNC5FWYJTGUPOAIHV7KNRSB7KLWVJNPQ43OE` no longer matches — it only has `deposit_and_split`.)
+
+2. **Signature confirmation** — your routes already match the contract:
+   - `lock_escrow(family: Address, amount: i128) -> u32` ✅
+   - `release_escrow(escrow_id: u32)` ✅ (your `convertEscrowIdToScVal` already handles u32)
+   - `get_balances(user: Address) -> (i128, i128, i128)` ✅ (Day 4 route)
+
+3. **Lock route fix shipped** — `POST /api/escrow/lock` now returns the **contract** `escrow_id` (u32) instead of the wishlist UUID. Release route can keep reading it back the same way.
+
+4. **Auth model** — both `lock_escrow` and `release_escrow` call `family.require_auth()`. For server-signed flow to work, the demo family's `profiles.stellar_public_key` MUST equal the public key of `STELLAR_DEMO_SECRET_KEY`. P4 (Charles) is seeding this — see `docs/handoffs/p4-charles.md`. If you need to verify the family pubkey while Charles works on it, the test identity is `GAC3WCB5ZZ5GVWDOL4XCA3UJU5ZQ4CCAODREOEDLJB5UT4Q6BZDKPYUK`.
+
+5. **Re-run your end-to-end curl test** once `.env.local` is updated and Charles' two items (grants + seed pubkey) are done. The recipe is unchanged from `docs/from-team/rene-day3-summary.md` §8.
+
+6. **Day 4 heads-up** — P1 plans to enhance the contract so `release_escrow` credits a store address (not just flips a `released` flag). When that ships, expect a new contract id again and one signature change: `lock_escrow(family, store, amount)`. Will update this section before that lands.
+
+
 
 ## Network
 
