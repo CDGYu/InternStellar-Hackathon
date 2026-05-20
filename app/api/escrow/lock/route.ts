@@ -228,9 +228,14 @@ export async function POST(req: Request): Promise<NextResponse> {
   //   "esc_rel"  = (escrow_id, family, store, amount)
   // Read via Soroban RPC getEvents (filter contractIds: [NEXT_PUBLIC_CONTRACT_ID]).
   // Useful for: a receipts view, and avoiding a UI polling loop.
+  //
+  // RESPONSE SHAPE: per P1's fix in 3fe6cce, `escrow_id` IS the contract
+  // u32 (not the wishlist UUID) so the release route can pass it back to
+  // release_escrow(escrow_id) directly. `wishlist_id` is returned alongside
+  // for callers that need the DB pointer.
   return ok({
-    escrow_id: wishlist_id,
-    contract_escrow_id: escrowId ?? null,
+    escrow_id: escrowId ?? null,
+    wishlist_id,
     tx_hash: txHash,
     status: "locked",
     amount_stroops: grocery_stroops.toString(),
