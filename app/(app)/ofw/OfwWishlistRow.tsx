@@ -16,6 +16,7 @@ import { cn } from "@/components/ui/cn";
 import {
   ofwAddWishlistItem,
   ofwRemoveWishlistItem,
+  ofwUpdateInventoryStock,
 } from "@/app/(app)/ofw/actions";
 import { apiPost } from "@/lib/api/client";
 import { formatXlm, formatXlmWithUnit, truncateHash } from "@/lib/format-xlm";
@@ -114,6 +115,22 @@ export function OfwWishlistRow(props: OfwWishlistRowProps) {
     }
   }
 
+  async function updateStock(invId: string, stock: number): Promise<boolean> {
+    setError(null);
+    setBusyId(invId);
+    try {
+      const result = await ofwUpdateInventoryStock({ inventoryId: invId, stock });
+      if (!result.ok) {
+        setError(result.error ?? "Stock update failed.");
+        return false;
+      }
+      startTransition(() => router.refresh());
+      return true;
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   async function lockFunds() {
     setError(null);
     setPendingApi(true);
@@ -198,6 +215,7 @@ export function OfwWishlistRow(props: OfwWishlistRowProps) {
               busyId={busyId}
               onAdd={add}
               onRemove={remove}
+              onUpdateStock={updateStock}
             />
           </div>
         ) : null}
@@ -329,12 +347,14 @@ function Editor({
   busyId,
   onAdd,
   onRemove,
+  onUpdateStock,
 }: {
   items: OfwRowLine[];
   inventory: OfwRowInventoryItem[];
   busyId: string | null;
   onAdd: (inventoryId: string) => void;
   onRemove: (itemId: string) => void;
+  onUpdateStock: (inventoryId: string, stock: number) => Promise<boolean>;
 }) {
   const total = items.reduce<bigint>(
     (sum, it) => sum + BigInt(it.price_stroops_at_add) * BigInt(it.quantity),
@@ -452,14 +472,20 @@ function Editor({
                           <p className="text-sm font-medium text-ink truncate">
                             {inv.name}
                           </p>
-                          <p className="text-xs text-ink-muted tabular-nums">
-                            {formatXlm(BigInt(inv.price_stroops))} XLM
+                          <div className="text-xs text-ink-muted tabular-nums flex items-center gap-1.5 flex-wrap">
+                            <span>{formatXlm(BigInt(inv.price_stroops))} XLM</span>
+                            <span>·</span>
+                            <StockInput
+                              inventoryId={inv.id}
+                              initialStock={inv.stock}
+                              busy={busy}
+                              onSave={onUpdateStock}
+                            />
+                            <span>stock</span>
                             {inCart > 0 ? (
-                              <span className="text-accent"> · {inCart} in cart</span>
-                            ) : (
-                              <span> · {inv.stock} stock</span>
-                            )}
-                          </p>
+                              <span className="text-accent">· {inCart} in cart</span>
+                            ) : null}
+                          </div>
                         </div>
                         <button
                           type="button"
@@ -487,5 +513,66 @@ function Editor({
         )}
       </div>
     </div>
+  );
+}
+
+/* -------------------------------------------------------------------- */
+/* Stock input — inline editable stock count                            */
+/* -------------------------------------------------------------------- */
+
+function StockInput({
+  inventoryId,
+  initialStock,
+  busy,
+  onSave,
+}: {
+  inventoryId: string;
+  initialStock: number;
+  busy: boolean;
+  onSave: (inventoryId: string, stock: number) => Promise<boolean>;
+}) {
+  const [value, setValue] = useState(String(initialStock));
+  const [saving, setSaving] = useState(false);
+
+  async function commit() {
+    const next = Number.parseInt(value, 10);
+    if (!Number.isFinite(next) || next < 0) {
+      setValue(String(initialStock));
+      return;
+    }
+    if (next === initialStock) return;
+    setSaving(true);
+    const ok = await onSave(inventoryId, next);
+    setSaving(false);
+    if (!ok) setValue(String(initialStock));
+  }
+
+  return (
+    <input
+      type="number"
+      min={0}
+      step={1}
+      inputMode="numeric"
+      value={value}
+      disabled={busy || saving}
+      onChange={(e) => setValue(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          (e.target as HTMLInputElement).blur();
+        } else if (e.key === "Escape") {
+          setValue(String(initialStock));
+          (e.target as HTMLInputElement).blur();
+        }
+      }}
+      aria-label="Stock"
+      className={cn(
+        "w-14 px-1.5 py-0.5 rounded-md text-xs text-ink font-medium tabular-nums text-center",
+        "bg-surface shadow-neu-inset-sm",
+        "focus:outline-none focus:ring-2 focus:ring-accent/40",
+        "disabled:opacity-50",
+      )}
+    />
   );
 }

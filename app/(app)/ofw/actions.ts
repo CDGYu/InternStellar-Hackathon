@@ -129,6 +129,35 @@ export async function ofwAddWishlistItem(args: {
 }
 
 /**
+ * Set the stock count on an inventory row.
+ *
+ * Exposed on the OFW dashboard so demos can adjust supply on the fly
+ * without bouncing through the store account. Same service-role posture
+ * as the wishlist edits above.
+ */
+export async function ofwUpdateInventoryStock(args: {
+  inventoryId: string;
+  stock: number;
+}): Promise<OfwActionResult> {
+  const caller = await requireOfwCaller();
+  if (!caller.ok) return { ok: false, error: caller.error };
+
+  if (!Number.isInteger(args.stock) || args.stock < 0) {
+    return { ok: false, error: "Stock must be a non-negative integer." };
+  }
+
+  const admin = getSupabaseAdmin();
+  const { error } = await admin
+    .from("inventory")
+    .update({ stock: args.stock })
+    .eq("id", args.inventoryId);
+  if (error) return { ok: false, error: `Stock update failed: ${error.message}` };
+
+  revalidatePath("/ofw");
+  return { ok: true };
+}
+
+/**
  * Remove one unit of a wishlist item.
  *
  * Behaviour:

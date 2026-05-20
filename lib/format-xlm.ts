@@ -65,6 +65,28 @@ export function formatXlmWithUnit(value: StroopInput, opts?: { maxDecimals?: num
   return `${formatXlm(value, opts)} XLM`;
 }
 
+/**
+ * Parse a user-entered XLM string into stroops (bigint).
+ *
+ * Accepts "3.45", "10", ".5", "0.0000001" (7-decimal stroop precision).
+ * Returns null for empty / non-numeric / negative input, or for inputs
+ * with more than 7 fractional digits (sub-stroop precision is a bug).
+ */
+export function parseXlmToStroops(input: string): bigint | null {
+  const trimmed = input.trim();
+  if (!trimmed) return null;
+  if (!/^\d*(?:\.\d*)?$/.test(trimmed)) return null;
+
+  const [whole, frac = ""] = trimmed.split(".");
+  if (frac.length > 7) return null;
+
+  const wholePart = whole === "" ? 0n : BigInt(whole);
+  const fracPadded = frac.padEnd(7, "0");
+  const fracPart = fracPadded === "" ? 0n : BigInt(fracPadded);
+
+  return wholePart * STROOPS_PER_XLM + fracPart;
+}
+
 /** Truncate a 64-char hex tx hash for display: "a1b2c3d4…d8e9". */
 export function truncateHash(hash: string | null | undefined, head = 8, tail = 4): string {
   if (!hash) return "—";

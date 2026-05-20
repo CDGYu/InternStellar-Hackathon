@@ -1,33 +1,16 @@
-import { signOutAction } from "@/app/auth/actions";
-import { dashboardForRole } from "@/app/auth/role-routes";
-import { Button } from "@/components/ui/Button";
 import { ButtonLink } from "@/components/ui/ButtonLink";
 import { Card } from "@/components/ui/Card";
 import { IconWell } from "@/components/ui/IconWell";
 import { SparkleIcon, ArrowUpRightIcon } from "@/components/ui/icons";
-import { loadUserProfile } from "@/lib/auth-role";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 /**
- * Marketing / entry page. Server-rendered so the CTA can adapt to the
- * caller's auth state without a client-side flicker.
+ * Marketing / entry page. Always shows Sign in / Register — never auto-routes
+ * a signed-in caller to their dashboard, since the landing is a shared entry
+ * point we want consistent for everyone.
  */
 export const dynamic = "force-dynamic";
 
-export default async function Home() {
-  const supabase = createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  let signedInDestination: string | null = null;
-  let signedInName: string | null = null;
-  if (user) {
-    const { profile } = await loadUserProfile(user.id);
-    signedInDestination = dashboardForRole(profile?.role);
-    signedInName = profile?.display_name ?? null;
-  }
-
+export default function Home() {
   return (
     <main className="min-h-screen flex items-center justify-center px-4 py-16">
       <Card className="w-full max-w-xl p-10 md:p-14 text-center">
@@ -47,63 +30,21 @@ export default async function Home() {
           wishlists, and Soroban-backed escrow.
         </p>
 
-        {signedInDestination ? (
-          <SignedInCta destination={signedInDestination} signedInName={signedInName} />
-        ) : (
-          <SignedOutCta />
-        )}
+        <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
+          <ButtonLink href="/login" variant="primary" size="lg" className="w-full sm:w-auto">
+            Sign in
+            <ArrowUpRightIcon className="h-4 w-4" />
+          </ButtonLink>
+          <ButtonLink
+            href="/register"
+            variant="secondary"
+            size="lg"
+            className="w-full sm:w-auto"
+          >
+            Register an account
+          </ButtonLink>
+        </div>
       </Card>
     </main>
-  );
-}
-
-function SignedOutCta() {
-  return (
-    <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
-      <ButtonLink href="/login" variant="primary" size="lg" className="w-full sm:w-auto">
-        Sign in
-        <ArrowUpRightIcon className="h-4 w-4" />
-      </ButtonLink>
-      <ButtonLink
-        href="/register"
-        variant="secondary"
-        size="lg"
-        className="w-full sm:w-auto"
-      >
-        Register an account
-      </ButtonLink>
-    </div>
-  );
-}
-
-function SignedInCta({
-  destination,
-  signedInName,
-}: {
-  destination: string;
-  signedInName: string | null;
-}) {
-  return (
-    <>
-      <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
-        <ButtonLink href={destination} variant="primary" size="lg" className="w-full sm:w-auto">
-          Go to your dashboard
-          <ArrowUpRightIcon className="h-4 w-4" />
-        </ButtonLink>
-
-        {/* Sign-out is a real action (clears session cookies), so it
-            stays a <button> inside a server-action <form>. */}
-        <form action={signOutAction} className="w-full sm:w-auto">
-          <Button type="submit" variant="secondary" size="lg" className="w-full">
-            Sign out
-          </Button>
-        </form>
-      </div>
-      {signedInName ? (
-        <p className="mt-6 text-sm text-ink-muted">
-          Signed in as <span className="text-ink font-medium">{signedInName}</span>
-        </p>
-      ) : null}
-    </>
   );
 }

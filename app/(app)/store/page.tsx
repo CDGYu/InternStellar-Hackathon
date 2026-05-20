@@ -14,10 +14,11 @@ import {
 } from "@/components/ui/icons";
 import { loadUserProfile } from "@/lib/auth-role";
 import { loadStoreDashboard } from "@/lib/dashboard/store";
-import { formatXlm, formatXlmWithUnit, truncateHash } from "@/lib/format-xlm";
+import { formatXlmWithUnit, truncateHash } from "@/lib/format-xlm";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { timeAgo } from "@/lib/time-ago";
 
+import { InventoryItemCard } from "./InventoryItemCard";
 import { MarkDeliveredButton } from "./MarkDeliveredButton";
 import { OrdersRealtimeRefresher } from "./OrdersRealtimeRefresher";
 import { ReceiptCard } from "./ReceiptCard";
@@ -346,48 +347,20 @@ function InventoryPanel({
             </p>
             <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {items.map((item) => (
-                <li
+                <InventoryItemCard
                   key={item.id}
-                  className="p-5 rounded-2xl bg-surface shadow-neu-inset-sm"
-                >
-                  <p className="font-display text-lg font-bold text-ink truncate">
-                    {item.name}
-                  </p>
-                  {item.unit ? (
-                    <p className="text-xs text-ink-muted mt-0.5">{item.unit}</p>
-                  ) : null}
-                  <div className="mt-4 flex items-end justify-between gap-3">
-                    <span className="text-sm text-ink-muted">
-                      <span className="text-ink font-medium tabular-nums">
-                        {formatXlm(item.price_stroops)} XLM
-                      </span>
-                    </span>
-                    <StockBadge stock={item.stock} />
-                  </div>
-                </li>
+                  id={item.id}
+                  name={item.name}
+                  priceStroops={item.price_stroops.toString()}
+                  stock={item.stock}
+                  unit={item.unit}
+                />
               ))}
             </ul>
           </div>
         ))}
       </div>
     </Card>
-  );
-}
-
-function StockBadge({ stock }: { stock: number }) {
-  // Three tiers: out (red dot), low (amber dot ≤5), healthy (teal dot).
-  // Same neumorphic pill recipe as StatusPill — keeps the visual language
-  // consistent without yet another component.
-  const tier =
-    stock === 0 ? "out" : stock <= 5 ? "low" : ("ok" as "out" | "low" | "ok");
-  const dot =
-    tier === "out" ? "bg-red-400" : tier === "low" ? "bg-amber-400" : "bg-accent-teal";
-  const label = tier === "out" ? "Out of stock" : `${stock} left`;
-  return (
-    <span className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium bg-surface shadow-neu-inset-sm text-ink">
-      <span className={`h-2 w-2 rounded-full ${dot}`} aria-hidden />
-      {label}
-    </span>
   );
 }
 
