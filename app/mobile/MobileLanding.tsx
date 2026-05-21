@@ -6,9 +6,13 @@ export function MobileLanding() {
     <div className="min-h-screen flex flex-col bg-[#f5f7fa] text-[#1a1d2e] font-sans">
       <div className="px-5 py-4 flex items-center justify-between bg-white shadow-sm">
         <h1 className="text-lg font-extrabold tracking-tight">InternStellar</h1>
-        <button className="w-9 h-9 flex items-center justify-center rounded-full bg-slate-50">
+        <Link
+          href="/mobile/settings"
+          aria-label="Open settings"
+          className="w-9 h-9 flex items-center justify-center rounded-full bg-slate-50 hover:bg-slate-100 transition-colors"
+        >
           <Menu className="w-5 h-5" />
-        </button>
+        </Link>
       </div>
 
       <div className="flex-1 flex flex-col justify-center px-6 pb-12 max-w-md mx-auto w-full">
@@ -27,7 +31,7 @@ export function MobileLanding() {
           href="/mobile/login"
           className="w-full bg-gradient-to-r from-[#5b7cff] to-[#7c9aff] hover:from-[#4a6bef] hover:to-[#6b89ef] text-white rounded-full py-5 text-base font-semibold shadow-lg shadow-[#5b7cff]/25 flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
         >
-          Get Started
+          Log in
           <ArrowRight className="w-5 h-5" />
         </Link>
 
