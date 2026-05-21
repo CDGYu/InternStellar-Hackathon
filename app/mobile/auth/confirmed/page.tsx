@@ -23,9 +23,9 @@ export const dynamic = "force-dynamic";
 export default async function MobileConfirmedPage({
   searchParams,
 }: {
-  searchParams?: { error?: string };
+  searchParams?: Promise<{ error?: string }>;
 }) {
-  const error = searchParams?.error;
+  const { error } = (await searchParams) ?? {};
 
   if (error) {
     return <ErrorView error={error} />;

@@ -31,9 +31,9 @@ export const dynamic = "force-dynamic";
 export default async function ConfirmedPage({
   searchParams,
 }: {
-  searchParams?: { error?: string };
+  searchParams?: Promise<{ error?: string }>;
 }) {
-  const error = searchParams?.error;
+  const { error } = (await searchParams) ?? {};
 
   const supabase = createSupabaseServerClient();
   const {

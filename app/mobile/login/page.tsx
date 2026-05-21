@@ -13,12 +13,13 @@ export const dynamic = "force-dynamic";
  * `?registered=1` shows the "check your email" banner after a
  * successful sign-up that requires email confirmation.
  */
-export default function MobileLoginPage({
+export default async function MobileLoginPage({
   searchParams,
 }: {
-  searchParams?: { registered?: string };
+  searchParams?: Promise<{ registered?: string }>;
 }) {
-  const justRegistered = searchParams?.registered === "1";
+  const { registered } = (await searchParams) ?? {};
+  const justRegistered = registered === "1";
 
   return (
     <div className="min-h-screen bg-[#f5f7fa] text-[#1a1d2e] font-sans px-5 py-6 flex flex-col">
