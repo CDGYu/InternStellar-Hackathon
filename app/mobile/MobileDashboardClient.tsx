@@ -13,13 +13,15 @@ import {
   CreditCard,
   Package,
   User,
-  ArrowRight
+  ArrowRight,
+  History
 } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
 import { MobileSendFunds } from "./components/MobileSendFunds";
 import { MobileBills } from "./components/MobileBills";
 import { MobileWishlists } from "./components/MobileWishlists";
+import { MobileActivity } from "./components/MobileActivity";
 import { formatXlmWithUnit, formatXlm } from "@/lib/format-xlm";
 
 type MobileDashboardClientProps = {
@@ -38,7 +40,9 @@ const chartData = [
 ];
 
 export function MobileDashboardClient({ ofwData, familyData, currentUserRole, currentUserId }: MobileDashboardClientProps) {
-  const [activeTab, setActiveTab] = useState<"home" | "send" | "bills" | "orders">("home");
+  const [activeTab, setActiveTab] = useState<
+    "home" | "send" | "bills" | "orders" | "activity"
+  >("home");
 
   // Determine active dataset based on role, but use both if available (God Mode demo).
   const primaryName = currentUserRole === "ofw" 
@@ -211,25 +215,40 @@ export function MobileDashboardClient({ ofwData, familyData, currentUserRole, cu
         {activeTab === "orders" && (
           <div className="animate-in fade-in slide-in-from-right-4 duration-300">
             {familyData ? (
-              <MobileWishlists 
-                familyId={familyData.family.id} 
-                wishlists={familyData.wishlists} 
+              <MobileWishlists
+                familyId={familyData.family.id}
+                wishlists={familyData.wishlists}
+                viewerRole={currentUserRole}
               />
             ) : (
               <div className="text-center py-20 text-[#6b7280]">
-                <p>Orders & Deliveries requires a Family account.</p>
+                <p>
+                  {currentUserRole === "ofw"
+                    ? "Your sponsored family hasn't been linked yet."
+                    : "Orders & Deliveries requires a Family account."}
+                </p>
               </div>
             )}
+          </div>
+        )}
+
+        {activeTab === "activity" && (
+          <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+            <MobileActivity
+              rows={ofwData?.activity || familyData?.activity || []}
+              stellarAddress={ofwData?.ofw.stellar_public_key}
+            />
           </div>
         )}
       </div>
 
       {/* Bottom Tab Bar */}
-      <div className="absolute bottom-0 w-full bg-white border-t border-black/5 px-6 pb-safe pt-3 pb-6 flex justify-between items-center shadow-[0_-10px_40px_rgba(0,0,0,0.03)] z-50">
+      <div className="absolute bottom-0 w-full bg-white border-t border-black/5 px-4 pb-safe pt-3 pb-6 flex justify-between items-center shadow-[0_-10px_40px_rgba(0,0,0,0.03)] z-50">
         <TabItem icon={<Home />} label="Home" active={activeTab === "home"} onClick={() => setActiveTab("home")} />
         <TabItem icon={<TrendingUp />} label="Send" active={activeTab === "send"} onClick={() => setActiveTab("send")} />
         <TabItem icon={<CreditCard />} label="Bills" active={activeTab === "bills"} onClick={() => setActiveTab("bills")} />
         <TabItem icon={<Package />} label="Orders" active={activeTab === "orders"} onClick={() => setActiveTab("orders")} />
+        <TabItem icon={<History />} label="Activity" active={activeTab === "activity"} onClick={() => setActiveTab("activity")} />
       </div>
     </div>
   );
@@ -252,7 +271,7 @@ function TabItem({ icon, label, active, onClick }: { icon: React.ReactNode, labe
   return (
     <button 
       onClick={onClick}
-      className={`flex flex-col items-center gap-1.5 min-w-[60px] transition-all duration-300 ${active ? "text-[#5b7cff]" : "text-[#9ca3af] hover:text-[#6b7280]"}`}
+      className={`flex flex-col items-center gap-1.5 min-w-[50px] transition-all duration-300 ${active ? "text-[#5b7cff]" : "text-[#9ca3af] hover:text-[#6b7280]"}`}
     >
       <div className={`transition-transform duration-300 ${active ? "scale-110 -translate-y-1" : "scale-100"}`}>
         {React.cloneElement(icon as React.ReactElement, { strokeWidth: active ? 2.5 : 2, className: "w-[22px] h-[22px]" })}
