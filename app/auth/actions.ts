@@ -1,12 +1,29 @@
 "use server";
 
 import { Keypair } from "@stellar/stellar-sdk";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { dashboardForRole, type Role } from "@/app/auth/role-routes";
 import { loadUserProfile } from "@/lib/auth-role";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+
+/**
+ * Derive the request's origin (https://host) from the `host` header so we
+ * can build absolute callback URLs that follow whichever deploy the user
+ * is on (prod, preview, localhost). Returns null when the header is
+ * missing — caller then falls back to the Supabase project's Site URL.
+ */
+async function requestOrigin(): Promise<string | null> {
+  const h = await headers();
+  const host = h.get("host");
+  if (!host) return null;
+  const proto = host.startsWith("localhost") || host.startsWith("127.")
+    ? "http"
+    : "https";
+  return `${proto}://${host}`;
+}
 
 /**
  * Wrap a Supabase-client-construction call so a missing-env throw becomes a
@@ -215,11 +232,22 @@ export async function registerAction(
   }
 
   // ---- 1. Create the auth user -------------------------------------
+  // emailRedirectTo is a belt-and-suspenders. The current confirm email
+  // template uses {SITE_URL}/auth/confirm?token_hash=... -- so the
+  // primary control is the Site URL configured in Supabase Auth. But
+  // setting emailRedirectTo here means:
+  //   - Future password-reset flows (resetPasswordForEmail) land in the
+  //     right place automatically.
+  //   - If the template ever reverts to the default {{ .ConfirmationURL }}
+  //     (which uses redirect_to), preview deploys still work.
+  //   - Local dev signups during demo prep stay on localhost.
+  const origin = await requestOrigin();
   const { data: signUpData, error: signUpErr } = await supabase.auth.signUp({
     email,
     password,
     options: {
       data: { display_name: displayName, role },
+      ...(origin ? { emailRedirectTo: `${origin}/auth/confirm` } : {}),
     },
   });
   if (signUpErr) {
