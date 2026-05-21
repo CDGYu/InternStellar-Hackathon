@@ -44,6 +44,11 @@ export interface FamilySettlementRow {
   tx_hash: string;
   amount_stroops: bigint;
   created_at: string;
+  /** Inlined from the parent wishlist so MobileActivity can label
+   *  rows without a second lookup. Null when the wishlist row is
+   *  gone (settlement is intentionally not cascaded — same as OFW). */
+  wishlist_notes: string | null;
+  wishlist_status: WishlistStatus | null;
 }
 
 export interface InventoryItem {
@@ -237,7 +242,10 @@ export async function loadFamilyDashboard(opts: {
         .in("wishlist_id", wishlistIds),
       supabase
         .from("settlement")
-        .select("id, wishlist_id, event_type, tx_hash, amount_stroops, created_at")
+        .select(
+          "id, wishlist_id, event_type, tx_hash, amount_stroops, created_at, " +
+            "wishlist:wishlist_id (notes, status)",
+        )
         .in("wishlist_id", wishlistIds)
         .order("created_at", { ascending: false }),
     ]);
@@ -254,14 +262,24 @@ export async function loadFamilyDashboard(opts: {
       itemCounts.set(id, (itemCounts.get(id) ?? 0) + 1);
     }
 
-    settlements = (settlementsResult.data ?? []).map((s) => ({
-      id: s.id as string,
-      wishlist_id: s.wishlist_id as string,
-      event_type: s.event_type as SettlementEvent,
-      tx_hash: s.tx_hash as string,
-      amount_stroops: toBig(s.amount_stroops),
-      created_at: s.created_at as string,
-    }));
+    settlements = (settlementsResult.data ?? []).map((s) => {
+      // Supabase nested-join can return either a single object or an
+      // array depending on FK shape. Coerce defensively — same pattern
+      // the OFW loader uses (see lib/dashboard/ofw.ts).
+      const wishlist = Array.isArray((s as any).wishlist)
+        ? (s as any).wishlist[0]
+        : (s as any).wishlist;
+      return {
+        id: s.id as string,
+        wishlist_id: s.wishlist_id as string,
+        event_type: s.event_type as SettlementEvent,
+        tx_hash: s.tx_hash as string,
+        amount_stroops: toBig(s.amount_stroops),
+        created_at: s.created_at as string,
+        wishlist_notes: (wishlist?.notes as string | null) ?? null,
+        wishlist_status: (wishlist?.status as WishlistStatus | null) ?? null,
+      };
+    });
   }
 
   // ---- 3. Active draft's line items (joined with inventory) ---------
