@@ -233,10 +233,14 @@ export async function loadStoreDashboard(opts: {
       };
     });
 
-    settlements = (settlementsResult.data ?? []).map((s) => {
-      const wishlist = Array.isArray((s as any).wishlist)
-        ? (s as any).wishlist[0]
-        : (s as any).wishlist;
+    settlements = (settlementsResult.data ?? []).map((row) => {
+      // Supabase's TS inference for nested-join selects degrades to
+      // GenericStringError under Next 15's stricter build-time checks.
+      // Cast to any once and use defensively. Also coerces the
+      // wishlist join which can be either an object or an array
+      // depending on FK shape.
+      const s = row as any;
+      const wishlist = Array.isArray(s.wishlist) ? s.wishlist[0] : s.wishlist;
       return {
         id: s.id as string,
         wishlist_id: s.wishlist_id as string,

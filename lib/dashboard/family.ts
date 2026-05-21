@@ -262,13 +262,14 @@ export async function loadFamilyDashboard(opts: {
       itemCounts.set(id, (itemCounts.get(id) ?? 0) + 1);
     }
 
-    settlements = (settlementsResult.data ?? []).map((s) => {
-      // Supabase nested-join can return either a single object or an
-      // array depending on FK shape. Coerce defensively — same pattern
-      // the OFW loader uses (see lib/dashboard/ofw.ts).
-      const wishlist = Array.isArray((s as any).wishlist)
-        ? (s as any).wishlist[0]
-        : (s as any).wishlist;
+    settlements = (settlementsResult.data ?? []).map((row) => {
+      // Supabase's TS inference for nested-join selects degrades to
+      // GenericStringError under Next 15's stricter build-time checks.
+      // Cast to any once and use defensively. Also coerces the
+      // wishlist join which can be either an object or an array
+      // depending on FK shape (same pattern as ofw loader).
+      const s = row as any;
+      const wishlist = Array.isArray(s.wishlist) ? s.wishlist[0] : s.wishlist;
       return {
         id: s.id as string,
         wishlist_id: s.wishlist_id as string,
