@@ -19,9 +19,11 @@
     "@stellar/stellar-sdk": "^15.1.0",
     "@supabase/ssr": "^0.5.2",
     "@supabase/supabase-js": "2.45.4",
+    "lucide-react": "^1.16.0",
     "next": "14.2.18",
     "react": "18.3.1",
     "react-dom": "18.3.1",
+    "recharts": "^3.8.1",
     "server-only": "^0.0.1"
   },
   "devDependencies": {
