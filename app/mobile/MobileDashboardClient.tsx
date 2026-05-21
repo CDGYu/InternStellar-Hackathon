@@ -118,28 +118,30 @@ export function MobileDashboardClient({ ofwData, familyData, currentUserRole, cu
               />
             </div>
 
-            {/* Send Funds CTA (Figma matching) */}
-            <div className="p-6 bg-gradient-to-br from-[#5b7cff] to-[#7c9aff] shadow-xl shadow-[#5b7cff]/20 rounded-3xl text-white relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl -mr-10 -mt-10" />
-              <div className="flex items-start gap-3 mb-5 relative z-10">
-                <div className="w-12 h-12 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center shadow-inner">
-                  <TrendingUp className="w-6 h-6 text-white" strokeWidth={2.5} />
+            {/* Send Funds CTA — OFW only (family has Shop, not Send) */}
+            {currentUserRole === "ofw" && (
+              <div className="p-6 bg-gradient-to-br from-[#5b7cff] to-[#7c9aff] shadow-xl shadow-[#5b7cff]/20 rounded-3xl text-white relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl -mr-10 -mt-10" />
+                <div className="flex items-start gap-3 mb-5 relative z-10">
+                  <div className="w-12 h-12 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center shadow-inner">
+                    <TrendingUp className="w-6 h-6 text-white" strokeWidth={2.5} />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-xl font-bold mb-1.5">Send funds</h3>
+                    <p className="text-white/80 text-sm leading-relaxed">
+                      Deposit into three on-chain buckets for specific needs.
+                    </p>
+                  </div>
                 </div>
-                <div className="flex-1">
-                  <h3 className="text-xl font-bold mb-1.5">Send funds</h3>
-                  <p className="text-white/80 text-sm leading-relaxed">
-                    Deposit into three on-chain buckets for specific needs.
-                  </p>
-                </div>
+                <button
+                  onClick={() => setActiveTab("send")}
+                  className="w-full mt-2 bg-white text-[#5b7cff] font-bold py-3.5 rounded-2xl hover:bg-white/90 active:scale-[0.98] transition-all flex items-center justify-center gap-2 shadow-lg relative z-10"
+                >
+                  Go to Send Funds
+                  <ArrowRight className="w-4 h-4" />
+                </button>
               </div>
-              <button 
-                onClick={() => setActiveTab("send")}
-                className="w-full mt-2 bg-white text-[#5b7cff] font-bold py-3.5 rounded-2xl hover:bg-white/90 active:scale-[0.98] transition-all flex items-center justify-center gap-2 shadow-lg relative z-10"
-              >
-                Go to Send Funds
-                <ArrowRight className="w-4 h-4" />
-              </button>
-            </div>
+            )}
 
             {/* Spending Breakdown */}
             <div className="p-6 bg-white shadow-sm border border-black/5 rounded-3xl">
