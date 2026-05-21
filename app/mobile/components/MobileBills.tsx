@@ -15,6 +15,7 @@ type MobileBillsProps = {
 export function MobileBills({ ofwId, bills }: MobileBillsProps) {
   const router = useRouter();
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [payingAll, setPayingAll] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [, startTransition] = useTransition();
 
@@ -42,6 +43,38 @@ export function MobileBills({ ofwId, bills }: MobileBillsProps) {
     }
   }
 
+  // Pay every unpaid bill sequentially. Sequential (not parallel) because
+  // /api/bills/pay has an in-flight idempotency guard keyed on (ofw, bill)
+  // and the underlying Stellar payment submission isn't built to handle
+  // concurrent ops from the same signer. If any single payment fails, stop
+  // there and surface the error — partial-success is honest.
+  async function handlePayAll() {
+    if (unpaid.length === 0 || payingAll) return;
+    setError(null);
+    setPayingAll(true);
+    try {
+      for (const bill of unpaid) {
+        setBusyId(bill.id);
+        const result = await apiPost<any>("/api/bills/pay", {
+          ofw_id: ofwId,
+          bill_id: bill.id,
+        });
+        if (!result.ok) {
+          setError(
+            `Stopped at ${bill.biller_name || bill.biller?.name || "a bill"}: ${
+              result.message || "payment failed"
+            }`,
+          );
+          return;
+        }
+      }
+      startTransition(() => router.refresh());
+    } finally {
+      setBusyId(null);
+      setPayingAll(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -55,8 +88,16 @@ export function MobileBills({ ofwId, bills }: MobileBillsProps) {
         <div className="p-6 bg-[#1a1d2e] rounded-3xl text-white shadow-xl">
           <p className="text-[11px] uppercase tracking-widest text-white/60 font-bold mb-1">Total Due</p>
           <h3 className="text-3xl font-extrabold mb-5">{formatXlm(totalDueStroops)} <span className="text-xl font-medium">XLM</span></h3>
-          <button className="w-full bg-white text-[#1a1d2e] py-3.5 rounded-2xl font-bold flex justify-center items-center gap-2 active:scale-[0.98] transition-transform">
-            Pay All Due <CheckCircle className="w-4 h-4" />
+          <button
+            type="button"
+            onClick={handlePayAll}
+            disabled={payingAll}
+            className="w-full bg-white text-[#1a1d2e] py-3.5 rounded-2xl font-bold flex justify-center items-center gap-2 active:scale-[0.98] transition-transform disabled:opacity-60"
+          >
+            {payingAll
+              ? `Paying ${unpaid.length} bill${unpaid.length === 1 ? "" : "s"}…`
+              : `Pay All Due (${unpaid.length})`}
+            {!payingAll && <CheckCircle className="w-4 h-4" />}
           </button>
         </div>
       )}
