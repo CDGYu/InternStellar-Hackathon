@@ -241,6 +241,8 @@ export function MobileDashboardClient({ ofwData, familyData, currentUserRole, cu
               ofwId={ofwData?.ofw.id || currentUserId}
               familyId={familyData?.family.id}
               bills={ofwData?.bills || familyData?.bills || []}
+              role={currentUserRole}
+              billers={familyData?.billers ?? []}
             />
           </div>
         )}
