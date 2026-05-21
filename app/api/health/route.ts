@@ -2,61 +2,48 @@ import { NextResponse } from "next/server";
 
 import { err, ok } from "../../../lib/api/errors";
 import { newRequestId } from "../../../lib/api/request-id";
-import { getSupabaseAdmin } from "../../../lib/supabase-admin";
+import { buildHealthReport } from "../../../lib/health";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * Lightweight pre-flight check the UI hits on dashboard load so it can
- * disable chain-call buttons before they fail. Never throws.
+ * Deployment-status / readiness probe.
  *
- *   200 → both legs are live.
- *   503 → at least one leg is unreachable. Body still parses; UI inspects
- *         `chain` and `db` fields to decide what to gate.
+ * Body shape (success and degraded both — only `error` and the HTTP status
+ * differ):
  *
- * Body shape (success and degraded both):
- *   { chain: "ok" | "unconfigured", db: "ok" | "err", request_id, contract_id? }
+ *   {
+ *     ok:          true | false,
+ *     chain:       "ok" | "unconfigured",          // back-compat
+ *     db:          "ok" | "err",                   // back-compat
+ *     contract_id: "C…" (omitted if env missing),  // back-compat
+ *     checks: {
+ *       env:                 { <var>: "ok" | "missing", … },
+ *       supabase_admin:      { status, reason? },
+ *       stellar_rpc:         { status, passphrase?, passphrase_matches?, protocol_version?, reason? },
+ *       stellar_signer:      { status, public_key?, reason? },
+ *       stellar_contract_id: { status, contract_id?, reason? },
+ *     },
+ *     request_id: "<uuid>",
+ *   }
+ *
+ * 200 → everything green.
+ * 503 + Retry-After: 15 → at least one probe degraded.
+ *
+ * Top-level `chain` / `db` keys are kept for back-compat with the existing
+ * dashboard pre-flight; new callers should key off `ok` and `checks.*` for
+ * actionable detail. The humanized version lives at /status.
  */
 export async function GET(req: Request): Promise<NextResponse> {
   const requestId = newRequestId(req);
+  const report = await buildHealthReport();
 
-  // --- chain config check (env presence only — no network round trip) ------
-  const contractId = process.env.NEXT_PUBLIC_CONTRACT_ID;
-  const rpcUrl = process.env.STELLAR_RPC_URL;
-  const secret = process.env.STELLAR_DEMO_SECRET_KEY;
-  const chain: "ok" | "unconfigured" =
-    contractId && rpcUrl && secret ? "ok" : "unconfigured";
-
-  // --- db check: cheap head query -----------------------------------------
-  let db: "ok" | "err" = "ok";
-  try {
-    const supabase = getSupabaseAdmin();
-    const { error } = await supabase
-      .from("inventory")
-      .select("id", { count: "exact", head: true })
-      .limit(1);
-    if (error) {
-      console.error("[health] supabase probe failed:", error);
-      db = "err";
-    }
-  } catch (e) {
-    console.error("[health] supabase init failed:", e);
-    db = "err";
-  }
-
-  const payload = {
-    chain,
-    db,
-    ...(contractId ? { contract_id: contractId } : {}),
-  };
-
-  // 503 + Retry-After if anything degraded — UI can back off.
-  if (chain === "unconfigured" || db === "err") {
-    return err(503, "degraded", undefined, payload, {
+  if (!report.ok) {
+    return err(503, "degraded", undefined, report as unknown as Record<string, unknown>, {
       requestId,
       retryAfterSeconds: 15,
     });
   }
-  return ok(payload, { requestId });
+  return ok(report as unknown as Record<string, unknown>, { requestId });
 }
