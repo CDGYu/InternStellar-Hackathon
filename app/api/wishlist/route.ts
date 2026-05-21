@@ -5,6 +5,24 @@ import { err, ok, parseJsonBody } from "../../../lib/api/errors";
 import { newRequestId } from "../../../lib/api/request-id";
 import { getSupabaseAdmin } from "../../../lib/supabase-admin";
 
+/**
+ * POST /api/wishlist — server-side wishlist creation for families.
+ *
+ * Status: KEPT AS RESERVE. The family UI today (web `WishlistBuilder.tsx`
+ * and mobile `MobileShop.tsx`) creates the wishlist + items directly via
+ * the Supabase browser client, gated by the existing RLS policies
+ * (`family_writes_own_wishlist`, `family_writes_wishlist_item`). That
+ * path is what the demo runs. This route is a working server-side
+ * alternative — useful if you ever need to tighten validation beyond
+ * what RLS expresses (item caps, cross-row invariants, etc.), or to
+ * create wishlists from a server context (cron, admin tool) where the
+ * cookie-bound client isn't available.
+ *
+ * Still referenced from `scripts/_test-escrow-wiring.ts` and
+ * `scripts/_test-no-stacktrace-leak.ts`, so removing it would break
+ * those probes. Keep the route until either the tests are rewritten
+ * or the family UI is migrated to call it directly.
+ */
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
