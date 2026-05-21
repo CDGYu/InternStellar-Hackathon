@@ -23,7 +23,8 @@
       "Bash(curl -s -A \"Mozilla/5.0 \\(iPhone\\) Mobile\" -o /dev/null -w \"mobile-login=%{http_code}\\\\n\" http://localhost:3000/mobile/login)",
       "Bash(curl -s -A \"Mozilla/5.0 \\(iPhone\\) Mobile\" -o /dev/null -w \"mobile-settings=%{http_code}\\\\n\" http://localhost:3000/mobile/settings)",
       "Bash(curl -s -A \"Mozilla/5.0 \\(iPhone\\) Mobile\" -o /dev/null -w \"mobile-confirmed=%{http_code}\\\\n\" http://localhost:3000/mobile/auth/confirmed)",
-      "Bash(curl -s -A \"Mozilla/5.0 \\(Windows NT 10.0\\) Chrome/120\" -o /dev/null -w \"web-settings=%{http_code}\\\\n\" http://localhost:3000/settings)"
+      "Bash(curl -s -A \"Mozilla/5.0 \\(Windows NT 10.0\\) Chrome/120\" -o /dev/null -w \"web-settings=%{http_code}\\\\n\" http://localhost:3000/settings)",
+      "WebFetch(domain:horizon-testnet.stellar.org)"
     ]
   }
 }
