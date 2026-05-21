@@ -9,9 +9,15 @@ import { formatXlmWithUnit } from "@/lib/format-xlm";
 type MobileWishlistsProps = {
   familyId: string;
   wishlists: any[];
+  viewerRole: "ofw" | "family";
 };
 
-export function MobileWishlists({ familyId, wishlists }: MobileWishlistsProps) {
+export function MobileWishlists({
+  familyId,
+  wishlists,
+  viewerRole,
+}: MobileWishlistsProps) {
+  const isOfw = viewerRole === "ofw";
   const router = useRouter();
   const [submittingId, setSubmittingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -41,9 +47,13 @@ export function MobileWishlists({ familyId, wishlists }: MobileWishlistsProps) {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-extrabold mb-2">Orders</h2>
+        <h2 className="text-2xl font-extrabold mb-2">
+          {isOfw ? "Wishlists" : "Orders"}
+        </h2>
         <p className="text-sm text-[#6b7280] leading-relaxed">
-          Confirm delivery to release locked funds to the store.
+          {isOfw
+            ? "Your sponsored family's orders, on-chain."
+            : "Confirm delivery to release locked funds to the store."}
         </p>
       </div>
 
@@ -75,7 +85,7 @@ export function MobileWishlists({ familyId, wishlists }: MobileWishlistsProps) {
                 </div>
               </div>
 
-              {w.status === "delivered" && (
+              {!isOfw && w.status === "delivered" && (
                 <button
                   onClick={() => confirmDelivery(w.id)}
                   disabled={submittingId === w.id}
@@ -111,7 +121,11 @@ export function MobileWishlists({ familyId, wishlists }: MobileWishlistsProps) {
 
       {wishlists.length === 0 && (
         <div className="p-8 text-center bg-white border border-black/5 rounded-3xl">
-          <p className="text-sm text-[#6b7280]">No orders found.</p>
+          <p className="text-sm text-[#6b7280]">
+            {isOfw
+              ? "No wishlists yet — your sponsored family hasn't built one."
+              : "No orders yet — your wishlists will appear here once you start one."}
+          </p>
         </div>
       )}
     </div>
