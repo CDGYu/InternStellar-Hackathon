@@ -47,7 +47,7 @@ export async function POST(req: Request): Promise<NextResponse> {
   // Prevents a double-clicking family from firing two concurrent lock_escrow
   // calls for the same wishlist. Auto-releases at function exit via the
   // try/finally below.
-  const idemLock = beginIdempotent(["escrow/lock", family_id, wishlist_id]);
+  const idemLock = await beginIdempotent(["escrow/lock", family_id, wishlist_id]);
   if (!idemLock) {
     return err(409, "in_flight", "An identical request is already being processed.", undefined, {
       requestId,
@@ -65,11 +65,10 @@ export async function POST(req: Request): Promise<NextResponse> {
       return err(500, "server_misconfigured", "Supabase service env vars missing.", undefined, { requestId });
     }
 
-    // Auth check: caller must be the family themselves, OR an OFW.
-    // DEMO: there's no schema-level OFW→family link yet (see CLAUDE.md
-    // "Cross-cutting" — TODO P4 to add `family.sponsor_ofw_id`). Until
-    // that lands, any OFW can lock for any family_id. Acceptable on
-    // testnet; tighten before production.
+    // Auth check: caller must be the family themselves, OR the OFW the
+    // family is sponsored by. The sponsor link is profiles.sponsor_ofw_id —
+    // an OFW with no such link to family_id is rejected (otherwise any OFW
+    // could lock against any family's wishlist).
     if (caller.userId !== family_id) {
       const { data: callerProfile, error: cpErr } = await supabase
         .from("profiles")
@@ -82,6 +81,18 @@ export async function POST(req: Request): Promise<NextResponse> {
       }
       if (callerProfile?.role !== "ofw") {
         return err(403, "forbidden", "Caller must be the family or an OFW.", undefined, { requestId });
+      }
+      const { data: familyProfile, error: fpErr } = await supabase
+        .from("profiles")
+        .select("sponsor_ofw_id")
+        .eq("id", family_id)
+        .maybeSingle();
+      if (fpErr) {
+        console.error("[escrow/lock] family profile lookup failed:", fpErr);
+        return err(500, "db_error", "Could not verify family sponsor link.", undefined, { requestId });
+      }
+      if (familyProfile?.sponsor_ofw_id !== caller.userId) {
+        return err(403, "forbidden", "OFW is not linked to this family.", undefined, { requestId });
       }
     }
 
@@ -212,19 +223,28 @@ export async function POST(req: Request): Promise<NextResponse> {
       return err(500, "contract_error", "Unexpected error invoking contract.", undefined, { requestId });
     }
 
-    // ---- 6. Persist Supabase state (escrow_tx_hash + settlement) -----
-    const notes_with_id =
-      escrowId !== undefined && escrowId !== null
-        ? `${wishlist.notes ?? ""}\n__escrow_ret__:${JSON.stringify(escrowId)}`.trim()
-        : wishlist.notes ?? null;
+    // ---- 6. Persist Supabase state (escrow_id + escrow_tx_hash + settlement) -----
+    // Coerce the contract's u32 return into a number suitable for the
+    // bigint column. The bridge returns whatever scValToNative gave back —
+    // a JS number for u32 in practice, but be defensive for bigint/string.
+    function normalizeEscrowId(raw: unknown): number | null {
+      if (raw === undefined || raw === null) return null;
+      if (typeof raw === "number" && Number.isFinite(raw)) return raw;
+      if (typeof raw === "bigint") return Number(raw);
+      if (typeof raw === "string" && /^\d+$/.test(raw.trim())) {
+        return Number(raw.trim());
+      }
+      return null;
+    }
+    const escrowIdNum = normalizeEscrowId(escrowId);
 
     const { error: updErr } = await supabase
       .from("wishlist")
       .update({
         status: "locked",
         escrow_tx_hash: txHash,
+        escrow_id: escrowIdNum,
         total_stroops: grocery_stroops.toString(),
-        notes: notes_with_id,
         updated_at: new Date().toISOString(),
       })
       .eq("id", wishlist_id);
@@ -259,6 +279,6 @@ export async function POST(req: Request): Promise<NextResponse> {
       message: "Escrow locked successfully. Store can now prepare delivery.",
     }, { requestId });
   } finally {
-    idemLock.release();
+    await idemLock.release();
   }
 }

@@ -105,7 +105,7 @@ export async function POST(req: Request): Promise<NextResponse> {
   // ---- 3. Idempotency guard ---------------------------------------
   // (family, biller, account, amount, due) — same family adding the same
   // bill twice in flight (double-click on "Add bill") is blocked.
-  const idemLock = beginIdempotent([
+  const idemLock = await beginIdempotent([
     "bills/add",
     family_id,
     biller_id,
@@ -193,6 +193,6 @@ export async function POST(req: Request): Promise<NextResponse> {
       message: `Bill for ${biller.name} added. The OFW can now pay it from /ofw.`,
     }, { requestId });
   } finally {
-    idemLock.release();
+    await idemLock.release();
   }
 }

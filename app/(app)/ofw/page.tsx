@@ -15,6 +15,7 @@ import {
 import { loadUserProfile } from "@/lib/auth-role";
 import { loadOfwDashboard } from "@/lib/dashboard/ofw";
 import { formatXlm, formatXlmWithUnit } from "@/lib/format-xlm";
+import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 import { BillsPanel } from "./BillsPanel";
@@ -27,14 +28,6 @@ import { TransactionHistory } from "./TransactionHistory";
 // the env-var checks in getSupabaseAdmin().
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-
-// DEMO: the OFW → family link is not in the schema yet. For the seed there
-// is exactly one OFW (Auntie Maria) and one family (Lola Cora); the demo
-// hardcodes the family side of that link here. TODO(P4): replace with a
-// real relation — either a `family_ofw` join table or a
-// `family.sponsor_ofw_id` column. The OFW side is now driven by the
-// authenticated session (see below).
-const FAMILY_DEMO_ID = "22222222-2222-2222-2222-222222222222";
 
 export default async function OfwDashboardPage() {
   // ---- Auth gate -----------------------------------------------------
@@ -49,9 +42,22 @@ export default async function OfwDashboardPage() {
   const { profile } = await loadUserProfile(user.id);
   if (profile?.role !== "ofw") redirect(dashboardForRole(profile?.role));
 
+  // Resolve the family this OFW sponsors via profiles.sponsor_ofw_id.
+  // The demo seed links Lola Cora to Auntie Maria; a fresh OFW with no
+  // sponsored family renders the empty state (HeroStrip + EmptyState already
+  // handle family=null gracefully).
+  const admin = getSupabaseAdmin();
+  const { data: linkedFamily } = await admin
+    .from("profiles")
+    .select("id")
+    .eq("role", "family")
+    .eq("sponsor_ofw_id", user.id)
+    .maybeSingle();
+  const familyId = linkedFamily?.id ?? null;
+
   const data = await loadOfwDashboard({
     ofwId: user.id,
-    familyId: FAMILY_DEMO_ID,
+    familyId,
   });
 
   return (
@@ -96,7 +102,7 @@ export default async function OfwDashboardPage() {
             <div className="mt-10">
               <ActiveWishlists
                 wishlists={data.activeWishlists}
-                familyId={FAMILY_DEMO_ID}
+                familyId={familyId ?? ""}
                 inventory={data.inventory}
               />
             </div>

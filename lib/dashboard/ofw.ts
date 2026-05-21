@@ -138,7 +138,8 @@ function toBig(value: unknown): bigint {
 
 export async function loadOfwDashboard(opts: {
   ofwId: string;
-  familyId: string;
+  /** Null when the signed-in OFW has no sponsored family linked yet. */
+  familyId: string | null;
 }): Promise<OfwDashboardData> {
   const supabase = getSupabaseAdmin();
 
@@ -148,23 +149,30 @@ export async function loadOfwDashboard(opts: {
   // by role below.
   // Inventory: full store catalogue, used by the OFW's wishlist editor.
   // Bills: the family's household bills + each bill's biller info.
+  //
+  // When familyId is null (unsponsored OFW), we still load profiles +
+  // inventory; bills + wishlists short-circuit to empty so Postgres never
+  // sees an empty-string UUID.
+  const profileIds = opts.familyId ? [opts.ofwId, opts.familyId] : [opts.ofwId];
   const [profilesResult, inventoryResult, billsResult] = await Promise.all([
     supabase
       .from("profiles")
       .select("id, role, display_name, country, stellar_public_key")
-      .in("id", [opts.ofwId, opts.familyId]),
+      .in("id", profileIds),
     supabase
       .from("inventory")
       .select("id, store_id, name, category, price_stroops, stock, unit")
       .order("category", { ascending: true })
       .order("name", { ascending: true }),
-    supabase
-      .from("bill")
-      .select(
-        "id, account_number, amount_stroops, due_date, status, autopay_enabled, biller:biller_id (id, name, category, stellar_address)",
-      )
-      .eq("family_id", opts.familyId)
-      .order("due_date", { ascending: true }),
+    opts.familyId
+      ? supabase
+          .from("bill")
+          .select(
+            "id, account_number, amount_stroops, due_date, status, autopay_enabled, biller:biller_id (id, name, category, stellar_address)",
+          )
+          .eq("family_id", opts.familyId)
+          .order("due_date", { ascending: true })
+      : Promise.resolve({ data: [], error: null } as const),
   ]);
 
   const { data: profiles, error: pErr } = profilesResult;
@@ -192,17 +200,22 @@ export async function loadOfwDashboard(opts: {
       `OFW profile not found: ${opts.ofwId}. Did you run db/seed.sql?`,
     );
   }
-  const familyRow = profiles?.find((p) => p.id === opts.familyId) ?? null;
+  const familyRow = opts.familyId
+    ? profiles?.find((p) => p.id === opts.familyId) ?? null
+    : null;
 
   // ---- 2. Wishlists for this family ----------------------------------
-  const { data: wishlistRowsRaw, error: wErr } = await supabase
-    .from("wishlist")
-    .select(
-      "id, status, total_stroops, notes, escrow_tx_hash, release_tx_hash, created_at, updated_at",
-    )
-    .eq("family_id", opts.familyId)
-    .order("updated_at", { ascending: false });
+  const wishlistResult = opts.familyId
+    ? await supabase
+        .from("wishlist")
+        .select(
+          "id, status, total_stroops, notes, escrow_tx_hash, release_tx_hash, created_at, updated_at",
+        )
+        .eq("family_id", opts.familyId)
+        .order("updated_at", { ascending: false })
+    : ({ data: [], error: null } as const);
 
+  const { data: wishlistRowsRaw, error: wErr } = wishlistResult;
   if (wErr) throw new Error(`wishlist load failed: ${wErr.message}`);
 
   const wishlists: WishlistRow[] = (wishlistRowsRaw ?? []).map((w) => ({

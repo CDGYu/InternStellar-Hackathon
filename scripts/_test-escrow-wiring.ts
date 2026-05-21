@@ -139,7 +139,8 @@ async function main() {
     const res = err(404, "wishlist_not_found");
     assert.equal(res.status, 404);
     const body = await res.json();
-    assert.deepEqual(body, { error: "wishlist_not_found" });
+    assert.equal(body.error, "wishlist_not_found");
+    assert.match(body.request_id, /^[0-9a-f-]{36}$/);
   });
 
   console.log("\nroute handlers compile");

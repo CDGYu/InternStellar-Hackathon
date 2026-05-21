@@ -41,24 +41,21 @@ export class ContractCallError extends Error {
   }
 }
 
-// Known panic strings P1's Day 4 contract throws. Used by extractPanicReason
-// so the HTTP `reason` field is human-readable instead of an opaque hex code.
-// Keep in sync with `internstellar-contract/contracts/internstellar/src/lib.rs`.
-const KNOWN_PANIC_STRINGS = [
-  "total must be positive",
-  "percentages must sum to 100",
-  "util overflow",
-  "groc overflow",
-  "emerg overflow",
-  "escrow amount must be positive",
-  "family cannot be store",
-  "insufficient grocery balance",
-  "groc underflow",
-  "escrow id overflow",
-  "escrow not found",
-  "escrow already released",
-  "store groc overflow",
-];
+// Map from the contract's `#[contracterror] enum Error` discriminants to a
+// stable human reason. Soroban surfaces `panic_with_error!(env, Error::X)`
+// as `Error(Contract, #N)` in simulation error messages — `extractPanicReason`
+// parses N and looks it up here. Renumbering a variant in the Rust source
+// changes the on-chain code seen here, so the two files must stay in sync.
+const CONTRACT_ERROR_REASONS: Record<number, string> = {
+  1: "total must be positive",
+  2: "percentages must sum to 100",
+  3: "escrow amount must be positive",
+  4: "family cannot be store",
+  5: "insufficient grocery balance",
+  6: "escrow not found",
+  7: "escrow already released",
+  8: "arithmetic overflow",
+};
 
 // ------------------------------------------------------------------
 // Config (read fresh each call so the dev server picks up .env edits
@@ -256,12 +253,16 @@ async function simulateContract(
 
 function extractPanicReason(err: unknown): string | null {
   const msg = err instanceof Error ? err.message : String(err);
-  // First try the known panic strings list (literal substring match) — these
-  // are what P1 throws in the Rust contract and are stable across SDK versions.
-  for (const known of KNOWN_PANIC_STRINGS) {
-    if (msg.includes(known)) return known;
+  // Soroban surfaces contract errors raised via `panic_with_error!` as
+  // `Error(Contract, #N)` in panic / simulation error messages. Parse N and
+  // look up the matching variant. Falls back to any quoted snake_case
+  // identifier (for legacy panics that may still surface as strings).
+  const numericMatch = msg.match(/Error\(Contract,\s*#(\d+)\)/);
+  if (numericMatch) {
+    const code = Number(numericMatch[1]);
+    const reason = CONTRACT_ERROR_REASONS[code];
+    if (reason) return reason;
   }
-  // Fallback: regex for any quoted snake_case identifier the SDK surfaces.
   const match = msg.match(/[#"']([a-z][a-z_0-9]{2,40})[#"']/i);
   return match?.[1] ?? null;
 }

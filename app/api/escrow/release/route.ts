@@ -27,17 +27,6 @@ function validateBody(body: Record<string, unknown>): ReleaseBody | string {
   return { family_id, wishlist_id };
 }
 
-function extractStashedEscrowId(notes: string | null): unknown {
-  if (!notes) return null;
-  const match = notes.match(/__escrow_ret__:(.+)$/m);
-  if (!match) return null;
-  try {
-    return JSON.parse(match[1]);
-  } catch {
-    return match[1].trim();
-  }
-}
-
 export async function POST(req: Request): Promise<NextResponse> {
   const requestId = newRequestId(req);
 
@@ -59,7 +48,7 @@ export async function POST(req: Request): Promise<NextResponse> {
   // release_escrow calls. Already-released is also guarded inside the
   // handler (DB check), but the in-flight check fires first and saves
   // the chain round-trip on the second click.
-  const idemLock = beginIdempotent(["escrow/release", family_id, wishlist_id]);
+  const idemLock = await beginIdempotent(["escrow/release", family_id, wishlist_id]);
   if (!idemLock) {
     return err(409, "in_flight", "An identical request is already being processed.", undefined, {
       requestId,
@@ -90,11 +79,23 @@ export async function POST(req: Request): Promise<NextResponse> {
       if (callerProfile?.role !== "ofw") {
         return err(403, "forbidden", "Caller must be the family or an OFW.", undefined, { requestId });
       }
+      const { data: familyProfile, error: fpErr } = await supabase
+        .from("profiles")
+        .select("sponsor_ofw_id")
+        .eq("id", family_id)
+        .maybeSingle();
+      if (fpErr) {
+        console.error("[escrow/release] family profile lookup failed:", fpErr);
+        return err(500, "db_error", "Could not verify family sponsor link.", undefined, { requestId });
+      }
+      if (familyProfile?.sponsor_ofw_id !== caller.userId) {
+        return err(403, "forbidden", "OFW is not linked to this family.", undefined, { requestId });
+      }
     }
 
     const { data: wishlist, error: wErr } = await supabase
       .from("wishlist")
-      .select("id, family_id, status, total_stroops, escrow_tx_hash, release_tx_hash, notes")
+      .select("id, family_id, status, total_stroops, escrow_tx_hash, release_tx_hash, escrow_id")
       .eq("id", wishlist_id)
       .eq("family_id", family_id)
       .maybeSingle();
@@ -122,8 +123,16 @@ export async function POST(req: Request): Promise<NextResponse> {
     }
 
     // ---- 5. Call the contract ---------------------------------------
-    const stashed = extractStashedEscrowId(wishlist.notes);
-    const escrowId = stashed ?? wishlist.escrow_tx_hash;
+    // The on-chain u32 escrow id is captured into wishlist.escrow_id by the
+    // lock route. A NULL here means the lock either pre-dates this column or
+    // failed to record the id — release cannot proceed without it (passing
+    // the tx hash as a fallback would surface as an opaque contract_error).
+    if (wishlist.escrow_id == null) {
+      return err(409, "escrow_id_missing",
+        "Lock recorded but escrow_id was not captured. Reconcile from settlement.",
+        undefined, { requestId });
+    }
+    const escrowId: number = Number(wishlist.escrow_id);
 
     let txHash: string;
     try {
@@ -193,6 +202,6 @@ export async function POST(req: Request): Promise<NextResponse> {
         : "Payment released, but inventory decrement failed. P4 audit job will reconcile.",
     }, { requestId });
   } finally {
-    idemLock.release();
+    await idemLock.release();
   }
 }

@@ -3,13 +3,21 @@
 use super::*;
 use soroban_sdk::{
     testutils::{Address as _, Events as _},
-    Address, Env,
+    Address, Env, Error as SdkError,
 };
 
 // 1 XLM = 10^7 stroops on Stellar. We treat that as one demo "unit" so the
 // numbers in tests still look like ledger amounts instead of dimensionless
 // integers. ONE_UNIT * 1000 mirrors the P1 plan's "₱1000 deposit" example.
 const ONE_UNIT: i128 = 10_000_000;
+
+// Helper: turn our `#[contracterror] Error::X` into the host-error shape
+// `try_*` methods surface (`soroban_sdk::Error::from_contract_error(code)`).
+// `#[contracterror]` emits `impl From<Error> for soroban_sdk::Error`, so
+// `.into()` is the canonical conversion.
+fn expected_contract_error(e: Error) -> SdkError {
+    e.into()
+}
 
 fn new_contract() -> (Env, soroban_sdk::Address) {
     let env = Env::default();
@@ -101,43 +109,68 @@ fn second_deposit_accumulates_running_balance() {
 }
 
 #[test]
-#[should_panic(expected = "percentages must sum to 100")]
 fn rejects_percentages_summing_above_100() {
     let (env, contract_id) = new_contract();
     let client = ContractClient::new(&env, &contract_id);
 
     let user = Address::generate(&env);
-    client.deposit_and_split(&user, &(1000 * ONE_UNIT), &60u32, &30u32, &20u32);
+    let res = client.try_deposit_and_split(&user, &(1000 * ONE_UNIT), &60u32, &30u32, &20u32);
+
+    assert_eq!(res.err(), Some(Ok(expected_contract_error(Error::PctNotHundred))));
 }
 
 #[test]
-#[should_panic(expected = "percentages must sum to 100")]
 fn rejects_percentages_summing_below_100() {
     let (env, contract_id) = new_contract();
     let client = ContractClient::new(&env, &contract_id);
 
     let user = Address::generate(&env);
-    client.deposit_and_split(&user, &(1000 * ONE_UNIT), &50u32, &30u32, &10u32);
+    let res = client.try_deposit_and_split(&user, &(1000 * ONE_UNIT), &50u32, &30u32, &10u32);
+
+    assert_eq!(res.err(), Some(Ok(expected_contract_error(Error::PctNotHundred))));
 }
 
 #[test]
-#[should_panic(expected = "total must be positive")]
+fn rejects_percentages_that_overflow_u32_before_sum_check() {
+    // Without checked_add, u32::MAX + 1 wraps to 0 and the != 100 check could
+    // be bypassed (with overflow-checks off) or crash with an opaque panic
+    // (with overflow-checks on). Either way the user-facing error should be
+    // PctNotHundred — assert that.
+    let (env, contract_id) = new_contract();
+    let client = ContractClient::new(&env, &contract_id);
+
+    let user = Address::generate(&env);
+    let res = client.try_deposit_and_split(
+        &user,
+        &(1000 * ONE_UNIT),
+        &u32::MAX,
+        &1u32,
+        &1u32,
+    );
+
+    assert_eq!(res.err(), Some(Ok(expected_contract_error(Error::PctNotHundred))));
+}
+
+#[test]
 fn rejects_zero_total() {
     let (env, contract_id) = new_contract();
     let client = ContractClient::new(&env, &contract_id);
 
     let user = Address::generate(&env);
-    client.deposit_and_split(&user, &0i128, &60u32, &30u32, &10u32);
+    let res = client.try_deposit_and_split(&user, &0i128, &60u32, &30u32, &10u32);
+
+    assert_eq!(res.err(), Some(Ok(expected_contract_error(Error::TotalNotPositive))));
 }
 
 #[test]
-#[should_panic(expected = "total must be positive")]
 fn rejects_negative_total() {
     let (env, contract_id) = new_contract();
     let client = ContractClient::new(&env, &contract_id);
 
     let user = Address::generate(&env);
-    client.deposit_and_split(&user, &(-1i128), &60u32, &30u32, &10u32);
+    let res = client.try_deposit_and_split(&user, &(-1i128), &60u32, &30u32, &10u32);
+
+    assert_eq!(res.err(), Some(Ok(expected_contract_error(Error::TotalNotPositive))));
 }
 
 #[test]
@@ -217,7 +250,6 @@ fn lock_escrow_moves_grocery_funds_into_held_escrow() {
 }
 
 #[test]
-#[should_panic(expected = "insufficient grocery balance")]
 fn lock_escrow_rejects_amount_above_grocery_balance() {
     let (env, contract_id) = new_contract();
     let client = ContractClient::new(&env, &contract_id);
@@ -226,11 +258,12 @@ fn lock_escrow_rejects_amount_above_grocery_balance() {
     let store = Address::generate(&env);
     client.deposit_and_split(&family, &(1000 * ONE_UNIT), &60u32, &30u32, &10u32);
 
-    client.lock_escrow(&family, &store, &(301 * ONE_UNIT));
+    let res = client.try_lock_escrow(&family, &store, &(301 * ONE_UNIT));
+
+    assert_eq!(res.err(), Some(Ok(expected_contract_error(Error::InsufficientGroc))));
 }
 
 #[test]
-#[should_panic(expected = "escrow amount must be positive")]
 fn lock_escrow_rejects_zero_amount() {
     let (env, contract_id) = new_contract();
     let client = ContractClient::new(&env, &contract_id);
@@ -238,21 +271,24 @@ fn lock_escrow_rejects_zero_amount() {
     let family = Address::generate(&env);
     let store = Address::generate(&env);
 
-    client.lock_escrow(&family, &store, &0i128);
+    let res = client.try_lock_escrow(&family, &store, &0i128);
+
+    assert_eq!(res.err(), Some(Ok(expected_contract_error(Error::EscrowAmountNotPos))));
 }
 
 #[test]
-#[should_panic(expected = "family cannot be store")]
 fn lock_escrow_rejects_family_equals_store() {
     let (env, contract_id) = new_contract();
     let client = ContractClient::new(&env, &contract_id);
 
     let family = Address::generate(&env);
-    // Family fully funded, but they try to "send to themselves" — should panic
-    // before any storage mutation.
+    // Family fully funded, but they try to "send to themselves" — should
+    // error before any storage mutation.
     client.deposit_and_split(&family, &(1000 * ONE_UNIT), &60u32, &30u32, &10u32);
 
-    client.lock_escrow(&family, &family, &(100 * ONE_UNIT));
+    let res = client.try_lock_escrow(&family, &family, &(100 * ONE_UNIT));
+
+    assert_eq!(res.err(), Some(Ok(expected_contract_error(Error::FamilyEqualsStore))));
 }
 
 #[test]
@@ -334,7 +370,6 @@ fn release_escrow_credits_accumulate_when_store_serves_multiple_families() {
 }
 
 #[test]
-#[should_panic(expected = "escrow already released")]
 fn release_escrow_rejects_double_release() {
     let (env, contract_id) = new_contract();
     let client = ContractClient::new(&env, &contract_id);
@@ -345,18 +380,21 @@ fn release_escrow_rejects_double_release() {
     let escrow_id = client.lock_escrow(&family, &store, &(200 * ONE_UNIT));
 
     client.release_escrow(&escrow_id);
-    client.release_escrow(&escrow_id);
+    let res = client.try_release_escrow(&escrow_id);
+
+    assert_eq!(res.err(), Some(Ok(expected_contract_error(Error::EscrowAlreadyReleased))));
 }
 
 #[test]
-#[should_panic(expected = "escrow not found")]
 fn release_escrow_rejects_unknown_id() {
     let (env, contract_id) = new_contract();
     let client = ContractClient::new(&env, &contract_id);
 
     let missing_escrow_id = 42u32;
 
-    client.release_escrow(&missing_escrow_id);
+    let res = client.try_release_escrow(&missing_escrow_id);
+
+    assert_eq!(res.err(), Some(Ok(expected_contract_error(Error::EscrowNotFound))));
 }
 
 // ---------------------------------------------------------------------------

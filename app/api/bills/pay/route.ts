@@ -68,7 +68,7 @@ export async function POST(req: Request): Promise<NextResponse> {
 
   // ---- 3. Idempotency guard ---------------------------------------
   // (ofw, bill) — same OFW paying the same bill twice in flight = blocked.
-  const idemLock = beginIdempotent(["bills/pay", ofw_id, bill_id]);
+  const idemLock = await beginIdempotent(["bills/pay", ofw_id, bill_id]);
   if (!idemLock) {
     return err(409, "in_flight", "An identical payment is already being processed.", undefined, {
       requestId,
@@ -203,6 +203,6 @@ export async function POST(req: Request): Promise<NextResponse> {
       message: `Bill paid to ${biller.name}.`,
     }, { requestId });
   } finally {
-    idemLock.release();
+    await idemLock.release();
   }
 }

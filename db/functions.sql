@@ -48,3 +48,54 @@ grant  execute on function public.finalize_wishlist(uuid) to authenticated;
 
 comment on function public.finalize_wishlist(uuid) is
   'Day 4: decrement inventory.stock for each wishlist_item on the given wishlist. Idempotency is enforced by the caller (release route checks wishlist.release_tx_hash before invoking). Stock is clamped at 0.';
+
+-- ============================================================
+-- try_idempotency_lock(p_key text, p_ttl_seconds int) -> boolean
+-- release_idempotency_lock(p_key text) -> void
+--
+-- Cross-replica request dedup backing lib/api/idempotency.ts. INSERT … ON
+-- CONFLICT … RETURNING emulates pg_try_advisory_lock semantics over the
+-- `request_lock` table with a TTL safety net so a crashed Node handler
+-- can't deadlock subsequent retries. See db/schema.sql for the table.
+--
+-- Returns true if the caller now holds the lock. Stealing only happens
+-- when the prior holder's expires_at has lapsed.
+-- ============================================================
+create or replace function public.try_idempotency_lock(p_key text, p_ttl_seconds int)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_acquired boolean;
+begin
+  insert into public.request_lock (key, expires_at)
+    values (p_key, now() + make_interval(secs => p_ttl_seconds))
+  on conflict (key) do update
+    set expires_at = excluded.expires_at
+    where public.request_lock.expires_at < now()
+  returning true into v_acquired;
+
+  return coalesce(v_acquired, false);
+end;
+$$;
+
+create or replace function public.release_idempotency_lock(p_key text)
+returns void
+language sql
+security definer
+set search_path = public
+as $$
+  delete from public.request_lock where key = p_key;
+$$;
+
+revoke all on function public.try_idempotency_lock(text, int) from public;
+revoke all on function public.release_idempotency_lock(text)  from public;
+grant execute on function public.try_idempotency_lock(text, int) to service_role;
+grant execute on function public.release_idempotency_lock(text)  to service_role;
+
+comment on function public.try_idempotency_lock(text, int) is
+  'Acquire a named request lock with a TTL fallback. Returns true on success, false if another live lock holds the key. Backed by request_lock.';
+comment on function public.release_idempotency_lock(text) is
+  'Release a request lock previously acquired by try_idempotency_lock. No-op if already expired or never held.';

@@ -1,5 +1,8 @@
 #![no_std]
-use soroban_sdk::{contract, contractimpl, contracttype, symbol_short, Address, Env};
+use soroban_sdk::{
+    contract, contracterror, contractimpl, contracttype, panic_with_error, symbol_short, Address,
+    Env,
+};
 
 // Event topic naming convention: short symbols (<= 9 ASCII chars) so that
 // `symbol_short!` works without runtime allocation. A dApp listening via the
@@ -8,6 +11,30 @@ use soroban_sdk::{contract, contractimpl, contracttype, symbol_short, Address, E
 //   "deposit"  — emitted by deposit_and_split   (data: family, util, groc, emerg)
 //   "esc_lock" — emitted by lock_escrow         (data: family, store, escrow_id, amount)
 //   "esc_rel"  — emitted by release_escrow      (data: escrow_id, family, store, amount)
+
+// `panic_with_error!` (vs raw `panic!("string")`) avoids per-call WASM string
+// allocation. The `lib/stellar/contract.ts` bridge maps these codes back to
+// human messages for the UI; renumbering an existing variant breaks that map.
+#[contracterror]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[repr(u32)]
+pub enum Error {
+    TotalNotPositive = 1,
+    PctNotHundred = 2,
+    EscrowAmountNotPos = 3,
+    FamilyEqualsStore = 4,
+    InsufficientGroc = 5,
+    EscrowNotFound = 6,
+    EscrowAlreadyReleased = 7,
+    ArithmeticOverflow = 8,
+}
+
+// Long-lived persistent entries (buckets + escrow rows). After each `set` the
+// contract extends TTL so the entry survives well past the next user action.
+// Threshold/extend chosen so a locked escrow won't archive between lock and a
+// late family confirm; tune if the typical lock→release gap grows.
+const PERSISTENT_TTL_THRESHOLD: u32 = 100;
+const PERSISTENT_TTL_EXTEND_TO: u32 = 4096;
 
 // Bucket key types are kept narrow so storage lookups stay cheap and explicit.
 // One enum variant per bucket per user keeps the data layout flat instead of
@@ -47,10 +74,19 @@ impl Contract {
         from.require_auth();
 
         if total <= 0 {
-            panic!("total must be positive");
+            panic_with_error!(&env, Error::TotalNotPositive);
         }
-        if pct_util + pct_groc + pct_emerg != 100 {
-            panic!("percentages must sum to 100");
+        // checked_add on the sum so an adversarial caller passing u32 values
+        // that overflow before the != 100 check can't reach the rest of the fn.
+        let sum = match pct_util
+            .checked_add(pct_groc)
+            .and_then(|s| s.checked_add(pct_emerg))
+        {
+            Some(s) => s,
+            None => panic_with_error!(&env, Error::PctNotHundred),
+        };
+        if sum != 100 {
+            panic_with_error!(&env, Error::PctNotHundred);
         }
 
         // Multiply before divide so integer division does not silently drop
@@ -68,16 +104,37 @@ impl Contract {
         let groc_balance: i128 = env.storage().persistent().get(&groc_key).unwrap_or(0);
         let emerg_balance: i128 = env.storage().persistent().get(&emerg_key).unwrap_or(0);
 
-        // checked_add makes overflow handling explicit even though the release
-        // profile already enables overflow-checks. This documents intent and
-        // gives a stable panic message that tests can pin to.
-        let new_util = util_balance.checked_add(util_share).expect("util overflow");
-        let new_groc = groc_balance.checked_add(groc_share).expect("groc overflow");
-        let new_emerg = emerg_balance.checked_add(emerg_share).expect("emerg overflow");
+        let new_util = match util_balance.checked_add(util_share) {
+            Some(v) => v,
+            None => panic_with_error!(&env, Error::ArithmeticOverflow),
+        };
+        let new_groc = match groc_balance.checked_add(groc_share) {
+            Some(v) => v,
+            None => panic_with_error!(&env, Error::ArithmeticOverflow),
+        };
+        let new_emerg = match emerg_balance.checked_add(emerg_share) {
+            Some(v) => v,
+            None => panic_with_error!(&env, Error::ArithmeticOverflow),
+        };
 
         env.storage().persistent().set(&util_key, &new_util);
+        env.storage().persistent().extend_ttl(
+            &util_key,
+            PERSISTENT_TTL_THRESHOLD,
+            PERSISTENT_TTL_EXTEND_TO,
+        );
         env.storage().persistent().set(&groc_key, &new_groc);
+        env.storage().persistent().extend_ttl(
+            &groc_key,
+            PERSISTENT_TTL_THRESHOLD,
+            PERSISTENT_TTL_EXTEND_TO,
+        );
         env.storage().persistent().set(&emerg_key, &new_emerg);
+        env.storage().persistent().extend_ttl(
+            &emerg_key,
+            PERSISTENT_TTL_THRESHOLD,
+            PERSISTENT_TTL_EXTEND_TO,
+        );
 
         env.events().publish(
             (symbol_short!("deposit"),),
@@ -99,41 +156,59 @@ impl Contract {
         family.require_auth();
 
         if amount <= 0 {
-            panic!("escrow amount must be positive");
+            panic_with_error!(&env, Error::EscrowAmountNotPos);
         }
         // A family paying themselves would let funds leave the escrow without
         // ever reaching a real merchant. Reject up front so the demo never
         // shows a "store paid" event where family == store.
         if family == store {
-            panic!("family cannot be store");
+            panic_with_error!(&env, Error::FamilyEqualsStore);
         }
 
         let groc_key = DataKey::Groc(family.clone());
         let groc_balance = read_balance(&env, groc_key.clone());
         if groc_balance < amount {
-            panic!("insufficient grocery balance");
+            panic_with_error!(&env, Error::InsufficientGroc);
         }
 
         let escrow_id = next_escrow_id(&env);
-        let remaining_groc = groc_balance
-            .checked_sub(amount)
-            .expect("groc underflow");
-        let following_id = escrow_id
-            .checked_add(1)
-            .expect("escrow id overflow");
+        let remaining_groc = match groc_balance.checked_sub(amount) {
+            Some(v) => v,
+            None => panic_with_error!(&env, Error::ArithmeticOverflow),
+        };
+        let following_id = match escrow_id.checked_add(1) {
+            Some(v) => v,
+            None => panic_with_error!(&env, Error::ArithmeticOverflow),
+        };
 
         env.storage().persistent().set(&groc_key, &remaining_groc);
+        env.storage().persistent().extend_ttl(
+            &groc_key,
+            PERSISTENT_TTL_THRESHOLD,
+            PERSISTENT_TTL_EXTEND_TO,
+        );
         env.storage()
             .persistent()
             .set(&DataKey::NextEscrowId, &following_id);
+        env.storage().persistent().extend_ttl(
+            &DataKey::NextEscrowId,
+            PERSISTENT_TTL_THRESHOLD,
+            PERSISTENT_TTL_EXTEND_TO,
+        );
+        let escrow_key = DataKey::Escrow(escrow_id);
         env.storage().persistent().set(
-            &DataKey::Escrow(escrow_id),
+            &escrow_key,
             &Escrow {
                 family: family.clone(),
                 store: store.clone(),
                 amount,
                 released: false,
             },
+        );
+        env.storage().persistent().extend_ttl(
+            &escrow_key,
+            PERSISTENT_TTL_THRESHOLD,
+            PERSISTENT_TTL_EXTEND_TO,
         );
 
         env.events().publish(
@@ -150,7 +225,7 @@ impl Contract {
             .storage()
             .persistent()
             .get(&escrow_key)
-            .unwrap_or_else(|| panic!("escrow not found"));
+            .unwrap_or_else(|| panic_with_error!(&env, Error::EscrowNotFound));
 
         // The family is the party that confirms delivery, so they sign the
         // release. The contract trusts that "delivery is confirmed" decision
@@ -158,11 +233,16 @@ impl Contract {
         escrow.family.require_auth();
 
         if escrow.released {
-            panic!("escrow already released");
+            panic_with_error!(&env, Error::EscrowAlreadyReleased);
         }
 
         escrow.released = true;
         env.storage().persistent().set(&escrow_key, &escrow);
+        env.storage().persistent().extend_ttl(
+            &escrow_key,
+            PERSISTENT_TTL_THRESHOLD,
+            PERSISTENT_TTL_EXTEND_TO,
+        );
 
         // Credit the store's grocery bucket with the held escrow amount.
         // Internal-bucket model (Option A): no real XLM moves, but
@@ -170,10 +250,18 @@ impl Contract {
         // shows. SAC-based real-XLM transfer is the planned Option B.
         let store_groc_key = DataKey::Groc(escrow.store.clone());
         let store_groc = read_balance(&env, store_groc_key.clone());
-        let new_store_groc = store_groc
-            .checked_add(escrow.amount)
-            .expect("store groc overflow");
-        env.storage().persistent().set(&store_groc_key, &new_store_groc);
+        let new_store_groc = match store_groc.checked_add(escrow.amount) {
+            Some(v) => v,
+            None => panic_with_error!(&env, Error::ArithmeticOverflow),
+        };
+        env.storage()
+            .persistent()
+            .set(&store_groc_key, &new_store_groc);
+        env.storage().persistent().extend_ttl(
+            &store_groc_key,
+            PERSISTENT_TTL_THRESHOLD,
+            PERSISTENT_TTL_EXTEND_TO,
+        );
 
         env.events().publish(
             (symbol_short!("esc_rel"),),

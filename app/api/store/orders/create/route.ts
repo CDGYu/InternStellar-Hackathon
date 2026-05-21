@@ -106,7 +106,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     .map((it) => `${it.inventory_id}:${it.quantity}`)
     .sort()
     .join(",");
-  const idemLock = beginIdempotent([
+  const idemLock = await beginIdempotent([
     "store/orders/create",
     store_id,
     family_id,
@@ -253,6 +253,6 @@ export async function POST(req: Request): Promise<NextResponse> {
       message: "Order created on the family's behalf. It now appears in the queue.",
     }, { requestId });
   } finally {
-    idemLock.release();
+    await idemLock.release();
   }
 }

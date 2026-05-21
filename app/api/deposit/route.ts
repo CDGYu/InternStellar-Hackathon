@@ -89,7 +89,7 @@ export async function POST(req: Request): Promise<NextResponse> {
   // Keys on (ofw, total) — the same OFW sending the same exact amount within
   // the 60s TTL is treated as a double-submission. If the OFW intentionally
   // wants to deposit the same amount twice they can wait out the TTL.
-  const idemLock = beginIdempotent(["deposit", ofw_id, total_stroops]);
+  const idemLock = await beginIdempotent(["deposit", ofw_id, total_stroops]);
   if (!idemLock) {
     return err(409, "in_flight", "An identical deposit is already being processed.", undefined, {
       requestId,
@@ -171,6 +171,6 @@ export async function POST(req: Request): Promise<NextResponse> {
       message: "Deposit split successfully across utilities, groceries, and emergency buckets.",
     }, { requestId });
   } finally {
-    idemLock.release();
+    await idemLock.release();
   }
 }

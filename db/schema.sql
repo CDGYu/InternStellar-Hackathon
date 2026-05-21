@@ -21,8 +21,13 @@ create table if not exists profiles (
   display_name       text not null,
   stellar_public_key text,                       -- nullable for now
   country            text,                       -- demo flavour (OFW location)
+  -- For role=family: the OFW profile that funds this family. The escrow
+  -- lock/release routes refuse OFW calls whose caller.id != family.sponsor_ofw_id.
+  sponsor_ofw_id     uuid references profiles (id),
   created_at         timestamptz not null default now()
 );
+
+create index if not exists profiles_sponsor_ofw_idx on profiles (sponsor_ofw_id);
 
 -- ============================================================
 -- inventory — what a store has in stock
@@ -51,6 +56,9 @@ create table if not exists wishlist (
   total_stroops   bigint not null default 0 check (total_stroops >= 0),
   notes           text,                          -- "Lola needs her maintenance meds"
   escrow_tx_hash  text,                          -- filled when escrow locks
+  -- On-chain u32 escrow id returned by lock_escrow. Consumed by the release
+  -- route. Do NOT derive from `notes` — that field is user-editable.
+  escrow_id       bigint,
   release_tx_hash text,                          -- filled when funds release
   created_at      timestamptz not null default now(),
   updated_at      timestamptz not null default now()
@@ -77,6 +85,17 @@ create table if not exists settlement (
   tx_hash        text not null,                  -- 64 hex chars
   amount_stroops bigint not null check (amount_stroops >= 0),
   created_at     timestamptz not null default now()
+);
+
+-- ============================================================
+-- request_lock — cross-replica idempotency dedup
+-- Used by lib/api/idempotency.ts to dedupe concurrent identical requests
+-- across multiple Node replicas. RPC helpers (try_idempotency_lock /
+-- release_idempotency_lock) live in db/functions.sql.
+-- ============================================================
+create table if not exists request_lock (
+  key        text primary key,
+  expires_at timestamptz not null
 );
 
 -- ============================================================

@@ -12,13 +12,10 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
  * Why this file exists: the family RLS policies (`family_writes_*`)
  * require `auth.uid() = family_id`. The OFW isn't the family, so a
  * cookie-bound write from the OFW dashboard would be rejected by RLS.
- *
- * The right long-term fix is a real ofw→family schema link
- * (see CLAUDE.md "Cross-cutting" — TODO P4 to add
- * `family.sponsor_ofw_id`). Until that lands, these server actions
- * verify the caller is an OFW and then do the write via `service_role`
- * (which bypasses RLS). Mirrors the same DEMO posture as the
- * `/api/escrow/lock` and `/release` auth loosenings.
+ * These server actions verify the caller is an OFW and then write via
+ * `service_role` (which bypasses RLS). The sponsor link
+ * (`profiles.sponsor_ofw_id`) is checked by the escrow lock/release
+ * routes; these editing actions stay role-gated only.
  *
  * Both actions revalidate `/ofw` so the page re-renders with the new
  * wishlist state without needing a manual refresh.

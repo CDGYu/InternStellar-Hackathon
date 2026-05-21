@@ -85,15 +85,18 @@ values
 -- ============================================================
 -- 3. Profiles (one OFW, one Family, one Store)
 -- ============================================================
-insert into profiles (id, role, display_name, country)
+insert into profiles (id, role, display_name, country, sponsor_ofw_id)
 values
-  ('11111111-1111-1111-1111-111111111111', 'ofw',    'Auntie Maria',           'United Arab Emirates'),
-  ('22222222-2222-2222-2222-222222222222', 'family', 'Lola Cora',              'Philippines'),
-  ('33333333-3333-3333-3333-333333333333', 'store',  'Aling Nena''s Sari-Sari', 'Philippines')
+  ('11111111-1111-1111-1111-111111111111', 'ofw',    'Auntie Maria',            'United Arab Emirates', null),
+  -- Lola Cora is sponsored by Auntie Maria; the escrow lock/release routes
+  -- enforce this link, so it must be seeded for the demo flow to work end-to-end.
+  ('22222222-2222-2222-2222-222222222222', 'family', 'Lola Cora',               'Philippines',          '11111111-1111-1111-1111-111111111111'),
+  ('33333333-3333-3333-3333-333333333333', 'store',  'Aling Nena''s Sari-Sari', 'Philippines',          null)
 on conflict (id) do update
-  set role         = excluded.role,
-      display_name = excluded.display_name,
-      country      = excluded.country;
+  set role           = excluded.role,
+      display_name   = excluded.display_name,
+      country        = excluded.country,
+      sponsor_ofw_id = excluded.sponsor_ofw_id;
 
 -- ============================================================
 -- 3b. Seed Stellar addresses for the demo profiles.
