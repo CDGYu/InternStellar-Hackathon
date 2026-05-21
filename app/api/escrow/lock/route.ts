@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { requireUser } from "../../../../lib/api/auth";
 import { err, ok, parseJsonBody } from "../../../../lib/api/errors";
+import { acquireIdempotency, makeKey } from "../../../../lib/api/idempotency";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
 import {
   ContractCallError,
@@ -39,6 +40,19 @@ export async function POST(req: Request): Promise<NextResponse> {
   }
   const { family_id, wishlist_id } = validation;
 
+  // ---- 2b. Idempotency guard --------------------------------------
+  // Reject a double-click that arrives while the first lock is still mid-chain
+  // (10-30s on testnet). Released at the end of this handler, success or fail.
+  const release = acquireIdempotency(makeKey("lock", family_id, wishlist_id));
+  if (!release) {
+    return err(
+      409,
+      "in_flight",
+      "A lock for this wishlist is already running. Wait for it to finish before retrying.",
+    );
+  }
+
+  try {
   // ---- 3. Load wishlist + items + family's stellar address --------
   let supabase;
   try {
@@ -188,7 +202,9 @@ export async function POST(req: Request): Promise<NextResponse> {
   } catch (e) {
     if (e instanceof ContractNotConfiguredError) {
       console.error("[escrow/lock]", e.message);
-      return err(503, "contract_not_configured", e.message);
+      return err(503, "contract_not_configured", e.message, undefined, {
+        retryAfterSeconds: 5,
+      });
     }
     if (e instanceof ContractCallError) {
       console.error("[escrow/lock] contract call failed:", e.reason, e.detail);
@@ -258,4 +274,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     store_id: storeId,
     message: "Escrow locked successfully. Store can now prepare delivery.",
   });
+  } finally {
+    release();
+  }
 }

@@ -1,7 +1,7 @@
-# InternStellar — Pitch Deck (Day 5 Near-Final)
+# InternStellar — Pitch Deck (Day 6 Final Draft)
 
 **Owner:** P4 (Charles) per `InternStellar-P4-FieldGuide.md`.
-**Status:** Near-final. Day 6 lock. Day 7 submission.
+**Status:** Day 6 final draft. Locks after first perfect rehearsal. Day 7 submission.
 **Audience:** Hackathon judges + Stellar PH 2026 partners.
 **Target run-time:** **5:30** (10 slides + 90s live demo). Hard ceiling 7:00.
 
@@ -47,26 +47,29 @@
 
 **Three bullets, each one a stat + a face:**
 
-- **$36B / year** flows into the Philippines as remittances — roughly
-  **8.7% of GDP**. (Source: World Bank Migration & Development Brief,
-  2024 — verify exact PH-only figure before slide lock.)
-- Up to **7% fees** through traditional channels (Western Union /
-  banks). One in six pesos lost to friction. (Source: World Bank
-  Remittance Prices Worldwide, Q3 2024.)
-- **62% of recipient families** report difficulty managing remittances
-  for essentials. *(Stand-in stat — replace with a verified survey
-  source or remove the % and tell the story qualitatively before lock.)*
+- **~$34B / year** in personal remittances into the Philippines, roughly
+  **~8.5% of GDP** (BSP cash-remittance series, 2023). `[TODO: confirm
+  the exact 2024 BSP figure before slide lock — link to BSP press
+  release in the deck speaker notes for Q&A defense.]`
+- Up to **~6.4% global average fee** for sending $200 home (World Bank
+  Remittance Prices Worldwide, Q4 2024); legacy bank rails to PH push
+  the high end past **7%**. One in fifteen pesos lost to friction.
+- **Most recipient families have no allocation tools** — the money
+  lands as a lump sum and gets eaten by whatever's loudest that week.
+  *(Qualitative framing — no contested stat. The Maria story below
+  is doing the heavy lifting; let it.)*
 
 **The face (one sentence, slow):**
 > Auntie Maria sends ₱20,000 from Dubai. Two weeks later there's no
 > medicine in the house and no rice.
 
 **Speaker notes (0:35):**
-> "Remittances are huge for the Philippines — 36 billion dollars a
-> year, about 8.7% of GDP. But the friction is brutal: up to 7% gone
-> to fees, and most receiving families struggle to allocate what's
-> left. \[Pause.\] Auntie Maria sends ₱20,000 from Dubai. Two weeks
-> later there's no medicine in the house and no rice."
+> "Remittances are huge for the Philippines — about 34 billion dollars
+> a year, roughly eight and a half percent of GDP. But the friction is
+> brutal: legacy rails can take more than 7% in fees, and the families
+> on the receiving end have no tools to allocate what lands.
+> \[Pause.\] Auntie Maria sends ₱20,000 from Dubai. Two weeks later
+> there's no medicine in the house and no rice."
 
 **Stage direction:** Drop the room's energy here. The pause before the Maria story is doing the work.
 
@@ -178,7 +181,8 @@ sequenceDiagram
 ```
 
 **Three short bullets to the right of the diagram:**
-- Stellar testnet contract `CB3V…GRDF` (confirm with P1 by Day 6 AM).
+- Stellar testnet contract `CB3VGM6SU3RRJLRJMT7CRX36ARKCH222ZKGKVPMS2DU5MIAHKUFZGRDF`
+  — frozen final, verified by `internstellar-contract/scripts/demo.sh`.
 - Supabase + Postgres RLS + Realtime — single source of truth, role-aware.
 - Append-only `settlement` audit table mirrors every on-chain event.
 
@@ -281,23 +285,28 @@ sequenceDiagram
 
 - "InternStellar · Build on Stellar PH 2026 · Testnet contract:
   `CB3VGM6SU3RRJLRJMT7CRX36ARKCH222ZKGKVPMS2DU5MIAHKUFZGRDF`"
-- *(Confirm contract ID with P1 the morning of Day 6 — re-deploys
-  during finalization invalidate it.)*
+- Contract id is **frozen** as of Day 6 — no further deploys planned.
+  `cargo test` 27/27 green from the same Rust source already on this
+  address.
 
 ---
 
 ## Presenter cheat sheet (memorize before stepping up)
 
 **Numbers to keep ready (asked by judges in Q&A):**
-- ~$36B/year remittance flow into PH (World Bank).
-- ~8.7% of PH GDP (verify Q4 2024 figure before lock).
-- Up to 7% legacy fees → sub-cent on Stellar.
+- ~$34B/year cash remittances into PH (BSP, 2023 series — `[TODO:
+  swap in 2024 BSP figure once confirmed]`).
+- ~8.5% of PH GDP (BSP/World Bank ratio — `[TODO: confirm 2024]`).
+- ~6.4% global average to send $200; legacy PH bank rails >7% (World
+  Bank Remittance Prices Worldwide, Q4 2024) → fractions of a cent on
+  Stellar.
 - Stellar finality: ~5 seconds.
 - Our demo: ~1:30 end-to-end.
 - Stock floor on reset: 50 per item.
 - Contract surface: 3 entry points (`deposit_and_split`, `lock_escrow`,
   `release_escrow`).
 - Settlement table: append-only, every on-chain event has a row.
+- Test coverage: 27/27 contract tests green (`cd internstellar-contract && cargo test`).
 
 **Anti-patterns to avoid during Q&A:**
 - "We could…" → say "We will, in week X."
@@ -322,9 +331,9 @@ sequenceDiagram
 |---|---|
 | Day 3 | Skeleton outline. |
 | Day 4 | First full draft. |
-| Day 5 (today) | **Near-final. Speaker notes + timing + backup plan.** |
-| Day 6 AM | Real screenshots from P3 capture protocol. Contract ID confirmed with P1. |
-| Day 6 PM | Lock. Spelling pass. PDF export. |
+| Day 5 | Near-final. Speaker notes + timing + backup plan. |
+| Day 6 AM (today) | **Final content draft. Contract id frozen, stats tightened, qualitative replacement for stand-in numbers, Q&A cheat-sheet locked.** Operator still needs: 3× UI screenshots (P3 protocol below), team photos, backup video. |
+| Day 6 PM | Lock after first perfect rehearsal. PDF export. `golden-path-v1` tag. |
 | Day 7 | Submission. |
 
 ---

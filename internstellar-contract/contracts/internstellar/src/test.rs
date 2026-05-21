@@ -413,3 +413,137 @@ fn release_escrow_emits_exactly_one_event_from_our_contract() {
     let our_events = env.events().all().filter_by_contract(&contract_id);
     assert_eq!(our_events.events().len(), 1);
 }
+
+// ---------------------------------------------------------------------------
+// Day 5 edge cases — re-deposit, double-confirm, zero-balance no-underflow.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn n_deposits_accumulate_without_overflow() {
+    // Five back-to-back deposits at sensible amounts: balance must equal sum
+    // and no intermediate `total * pct` or `balance + share` operation panics.
+    let (env, contract_id) = new_contract();
+    let client = ContractClient::new(&env, &contract_id);
+
+    let user = Address::generate(&env);
+    let per_deposit: i128 = 1000 * ONE_UNIT;
+    let n: i128 = 5;
+
+    for _ in 0..n {
+        client.deposit_and_split(&user, &per_deposit, &60u32, &30u32, &10u32);
+    }
+
+    let (util, groc, emerg) = client.get_balances(&user);
+    assert_eq!(util, n * 600 * ONE_UNIT);
+    assert_eq!(groc, n * 300 * ONE_UNIT);
+    assert_eq!(emerg, n * 100 * ONE_UNIT);
+}
+
+#[test]
+fn deposit_max_safe_total_does_not_panic() {
+    // The contract multiplies before dividing (`total * pct / 100`), so the
+    // largest single deposit that is guaranteed not to overflow i128 for any
+    // pct <= 100 is `i128::MAX / 100`. This test pins that the contract is
+    // happy at the documented safe ceiling — a regression here would mean
+    // the arithmetic order changed and shrank the safe range.
+    let (env, contract_id) = new_contract();
+    let client = ContractClient::new(&env, &contract_id);
+
+    let user = Address::generate(&env);
+    let total: i128 = i128::MAX / 100;
+
+    let (util, groc, emerg) = client.deposit_and_split(&user, &total, &60u32, &30u32, &10u32);
+
+    // We don't assert exact share values (they are astronomical and uninteresting),
+    // only that the call returned and the three shares reconstruct the total.
+    assert_eq!(util + groc + emerg, total);
+}
+
+#[test]
+fn lock_escrow_twice_creates_two_distinct_escrows() {
+    // Same family, same store, two locks: ids must be 1 then 2, both Escrow
+    // records must persist, and the family's groc bucket must be debited
+    // by the sum of both amounts.
+    let (env, contract_id) = new_contract();
+    let client = ContractClient::new(&env, &contract_id);
+
+    let family = Address::generate(&env);
+    let store = Address::generate(&env);
+    client.deposit_and_split(&family, &(1000 * ONE_UNIT), &60u32, &30u32, &10u32);
+
+    let first_amount: i128 = 100 * ONE_UNIT;
+    let second_amount: i128 = 50 * ONE_UNIT;
+
+    let id_a = client.lock_escrow(&family, &store, &first_amount);
+    let id_b = client.lock_escrow(&family, &store, &second_amount);
+
+    assert_eq!(id_a, 1);
+    assert_eq!(id_b, 2);
+
+    env.as_contract(&contract_id, || {
+        let escrow_a: Escrow = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Escrow(id_a))
+            .unwrap();
+        let escrow_b: Escrow = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Escrow(id_b))
+            .unwrap();
+
+        assert_eq!(escrow_a.amount, first_amount);
+        assert_eq!(escrow_b.amount, second_amount);
+        assert!(!escrow_a.released);
+        assert!(!escrow_b.released);
+    });
+
+    // Family's groc bucket: 300 deposited - 100 - 50 = 150 left.
+    let (_util, groc, _emerg) = client.get_balances(&family);
+    assert_eq!(groc, 150 * ONE_UNIT);
+}
+
+#[test]
+fn release_escrow_on_zero_family_groc_credits_store_without_underflow() {
+    // Lock the family's *entire* grocery balance into one escrow, leaving
+    // family groc at 0. Releasing must not touch family groc (which would
+    // underflow) — only the store side is credited.
+    let (env, contract_id) = new_contract();
+    let client = ContractClient::new(&env, &contract_id);
+
+    let family = Address::generate(&env);
+    let store = Address::generate(&env);
+    client.deposit_and_split(&family, &(1000 * ONE_UNIT), &60u32, &30u32, &10u32);
+
+    let escrow_amount: i128 = 300 * ONE_UNIT; // all of family's groc
+    let escrow_id = client.lock_escrow(&family, &store, &escrow_amount);
+
+    let (_, family_groc_after_lock, _) = client.get_balances(&family);
+    assert_eq!(family_groc_after_lock, 0);
+
+    client.release_escrow(&escrow_id);
+
+    let (_, family_groc_after_release, _) = client.get_balances(&family);
+    assert_eq!(family_groc_after_release, 0);
+
+    let (_, store_groc, _) = client.get_balances(&store);
+    assert_eq!(store_groc, escrow_amount);
+}
+
+#[test]
+fn get_balances_on_store_with_zero_credit_returns_zeroes() {
+    // A store address that has never received a release call must report
+    // (0, 0, 0). Mirrors `get_balances_returns_zeroes_for_new_user` but
+    // specifically guards against a regression where the release-time code
+    // path leaks state into store reads.
+    let (env, contract_id) = new_contract();
+    let client = ContractClient::new(&env, &contract_id);
+
+    let store = Address::generate(&env);
+
+    let (util, groc, emerg) = client.get_balances(&store);
+
+    assert_eq!(util, 0);
+    assert_eq!(groc, 0);
+    assert_eq!(emerg, 0);
+}

@@ -15,7 +15,6 @@ We hope to assist OFWs in ensuring that money is distributed transparently for n
 Our team created InternStellar to solve a problem that many OFWs and their families encounter: making sure that remittances are utilized safely, openly, and for necessities.
 
 ## 👥 Target Users
-Who are your primary users? (e.g., OFWs, unbanked Filipinos, MSMEs, merchants)
 - Overseas Filipino Workers
 - Family Members
 - MSME Owners
@@ -27,25 +26,29 @@ Who are your primary users? (e.g., OFWs, unbanked Filipinos, MSMEs, merchants)
 - Emergency Fund and Multi-Sig Controls — Dual-approval emergency withdrawals.
 
 ## 🛠 Tech Stack
-- Frontend: React/Next.js/Tailwind CSS
-- Backend: Next.js API Routes/Supabase
+- Frontend: React / Next.js / Tailwind CSS
+- Backend: Next.js API Routes / Supabase
 - Blockchain: Stellar (Soroban / Horizon API / Stellar SDK)
-- Other tools: GitHub/Stellar Lab
+- Other tools: GitHub / Stellar Lab
 
 ## 🚀 How to Run Locally
-git clone https://github.com/your-repo
+```
+git clone https://github.com/CDGYu/InternStellar-Hackathon.git
+cd InternStellar-Hackathon
 npm install
+cp .env.example .env.local   # then fill in Supabase + Stellar secrets
 npm run dev
+```
 
 ## 🌐 Deployment
 
 ### Testnet
-- Contract / App Address: `GXXXX...`
+- Contract / App Address: `CB3VGM6SU3RRJLRJMT7CRX36ARKCH222ZKGKVPMS2DU5MIAHKUFZGRDF`
 - 📸 Screenshot — Stellar Expert (Testnet)
   ![Testnet Screenshot](./screenshots/testnet.png)
 
 ### Mainnet
-- Contract / App Address: `GXXXX...`
+- Contract / App Address: `Not deployed — testnet-only for Build on Stellar PH 2026.`
 - 📸 Screenshot — Stellar Expert (Mainnet)
   ![Mainnet Screenshot](./screenshots/mainnet.png)
 
@@ -59,8 +62,8 @@ npm run dev
 |---|---|---|
 | Rene Vincent Cosme | Backend Engineer | @RVBCosme |
 | Gerardo Razon III | Frontend Engineer | @Inuyashatrades |
-| Charles Derick Yu | Product Lead | @CDGYu |
-| Prince Edwin Zablan | Full-Stack Engineer | @zprinceedwin |
+| Charles Derick Yu | Product Lead / Full-Stack Engineer | @CDGYu |
+| Prince Edwin Zablan | Blockchain Engineer | @zprinceedwin |
 
 ## 📜 License
 This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.

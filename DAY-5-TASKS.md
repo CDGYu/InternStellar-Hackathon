@@ -27,11 +27,11 @@ Day 5 task gate at end of 2026-05-21:
 
 | Owner | Item | Status |
 |---|---|---|
-| P1 | 4 new edge-case tests in `src/test.rs` | ❌ not started |
-| P1 | `internstellar-contract/scripts/demo.sh` | ❌ not started |
-| P2 | `GET /api/health` route | ❌ not started |
-| P2 | `scripts/_test-no-stacktrace-leak.ts` + `npm run test:no-leaks` | ❌ not started |
-| P2 | `request_id` / `Retry-After` / `AbortSignal` / idempotency | ❌ not started |
+| P1 | 4 new edge-case tests in `src/test.rs` | ✅ done (5 added, `cargo test` 27/27 green) |
+| P1 | `internstellar-contract/scripts/demo.sh` | ✅ done (syntax-checked; testnet run is operator step) |
+| P2 | `GET /api/health` route | ✅ done |
+| P2 | `scripts/_test-no-stacktrace-leak.ts` + `npm run test:no-leaks` | ✅ done (run against a live `next dev`) |
+| P2 | `request_id` / `Retry-After` / `AbortSignal` / idempotency | ✅ done |
 | P4 | `db/reset.sql` (`reset_demo()` RPC) | ✅ done |
 | P4 | `scripts/reset-demo.ts` + `npm run reset` | ✅ done |
 | P4 | 3× reset reliability run | 🟡 operator step (not run yet) |
@@ -40,7 +40,7 @@ Day 5 task gate at end of 2026-05-21:
 | All | Two timed rehearsals (< 3 min each) | ❌ not run yet |
 | P4 | Drop / replace `dev_write_*` RLS policies | ✅ done |
 | P4 | Rotate Supabase `service_role` key | ✅ done |
-| P4 | Fill `STELLAR_DEMO_SECRET_KEY` in `.env.local` | ❌ operator step (unverified) |
+| P4 | Fill `STELLAR_DEMO_SECRET_KEY` in `.env.local` | ✅ done (filled + Protocol-23 SDK fix + profile pubkey resync, 2026-05-21) |
 | All | `golden-path-v1` git tag (Day 4 carry-over) | ❌ not tagged |
 | P4 | `day-5-reset-ready` git tag | ❌ not tagged |
 

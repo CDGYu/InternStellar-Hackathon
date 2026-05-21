@@ -72,7 +72,7 @@ export default function DataPrivacyPage() {
 
       <div className="mt-10">
         <ButtonLink
-          href="mailto:privacy@internstellar.demo?subject=Data%20privacy%20request"
+          href="mailto:Internstellar.hackathon@gmail.com?subject=Data%20privacy%20request"
           variant="primary"
           size="lg"
           className="w-full"

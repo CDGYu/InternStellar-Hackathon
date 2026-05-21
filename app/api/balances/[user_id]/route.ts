@@ -80,7 +80,9 @@ export async function GET(req: Request, context: RouteContext): Promise<NextResp
   } catch (e) {
     if (e instanceof ContractNotConfiguredError) {
       console.error("[balances]", e.message);
-      return err(503, "contract_not_configured", e.message);
+      return err(503, "contract_not_configured", e.message, undefined, {
+        retryAfterSeconds: 5,
+      });
     }
     if (e instanceof ContractCallError) {
       console.error("[balances] contract call failed:", e.reason, e.detail);

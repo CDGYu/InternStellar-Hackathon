@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { requireUser } from "../../../../lib/api/auth";
 import { err, ok, parseJsonBody } from "../../../../lib/api/errors";
+import { acquireIdempotency, makeKey } from "../../../../lib/api/idempotency";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
 import {
   ContractCallError,
@@ -53,6 +54,21 @@ export async function POST(req: Request): Promise<NextResponse> {
   }
   const { family_id, wishlist_id } = validation;
 
+  // ---- 2b. Idempotency guard --------------------------------------
+  // A double-click on "Release escrow" while the first release is still
+  // mid-chain would credit the store twice (contract rejects with "escrow
+  // already released" on a true re-release, but the wishlist update + the
+  // settlement insert would still log a duplicate). Block here first.
+  const release = acquireIdempotency(makeKey("release", family_id, wishlist_id));
+  if (!release) {
+    return err(
+      409,
+      "in_flight",
+      "A release for this wishlist is already running. Wait for it to finish before retrying.",
+    );
+  }
+
+  try {
   // ---- 3. Load wishlist (must be 'delivered') ---------------------
   let supabase;
   try {
@@ -122,7 +138,9 @@ export async function POST(req: Request): Promise<NextResponse> {
   } catch (e) {
     if (e instanceof ContractNotConfiguredError) {
       console.error("[escrow/release]", e.message);
-      return err(503, "contract_not_configured", e.message);
+      return err(503, "contract_not_configured", e.message, undefined, {
+        retryAfterSeconds: 5,
+      });
     }
     if (e instanceof ContractCallError) {
       console.error("[escrow/release] contract call failed:", e.reason, e.detail);
@@ -186,4 +204,7 @@ export async function POST(req: Request): Promise<NextResponse> {
       ? "Payment released to store. Thank you!"
       : "Payment released, but inventory decrement failed. P4 audit job will reconcile.",
   });
+  } finally {
+    release();
+  }
 }

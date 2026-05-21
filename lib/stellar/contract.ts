@@ -113,77 +113,109 @@ interface InvokeResult {
 const POLL_INTERVAL_MS = 1500;
 const POLL_TIMEOUT_MS = 30_000;
 
+// Race a promise against an AbortSignal so the call returns promptly when the
+// signal aborts instead of blocking on a hanging HTTP request. The 15.x SDK
+// does not natively accept an AbortSignal, so we can't cancel its in-flight
+// fetch — but we can stop *waiting* on it and let the route return cleanly.
+function abortable<T>(p: Promise<T>, signal: AbortSignal): Promise<T> {
+  if (signal.aborted) {
+    return Promise.reject(
+      new ContractCallError("contract_call_timeout", signal.reason),
+    );
+  }
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () =>
+      reject(new ContractCallError("contract_call_timeout", signal.reason));
+    signal.addEventListener("abort", onAbort, { once: true });
+    p.then(resolve, reject).finally(() => signal.removeEventListener("abort", onAbort));
+  });
+}
+
 async function invokeContract(
   method: string,
   args: xdr.ScVal[],
+  externalSignal?: AbortSignal,
 ): Promise<InvokeResult> {
   const { rpcUrl, contractId, signer } = loadConfig();
 
-  const server = new rpc.Server(rpcUrl);
-  const contract = new Contract(contractId);
-
-  let sourceAccount;
-  try {
-    sourceAccount = await server.getAccount(signer.publicKey());
-  } catch (err) {
-    throw new ContractCallError(
-      "source_account_not_found",
-      err,
-    );
-  }
-
-  const builtTx = new TransactionBuilder(sourceAccount, {
-    fee: BASE_FEE,
-    networkPassphrase: NETWORK_PASSPHRASE,
-  })
-    .addOperation(contract.call(method, ...args))
-    .setTimeout(30)
-    .build();
-
-  let prepared;
-  try {
-    prepared = await server.prepareTransaction(builtTx);
-  } catch (err) {
-    // prepareTransaction throws when simulation fails — typically a contract panic.
-    const panicReason = extractPanicReason(err);
-    throw new ContractCallError(
-      panicReason ?? "contract_simulation_failed",
-      err,
-    );
-  }
-
-  prepared.sign(signer);
-
-  const send = await server.sendTransaction(prepared);
-  if (send.status === "ERROR" || send.status === "TRY_AGAIN_LATER") {
-    throw new ContractCallError(
-      `send_${send.status.toLowerCase()}`,
-      send,
-    );
-  }
-
-  // PENDING or DUPLICATE → poll
-  const deadline = Date.now() + POLL_TIMEOUT_MS;
-  while (Date.now() < deadline) {
-    const result = await server.getTransaction(send.hash);
-    if (result.status === "SUCCESS") {
-      return {
-        txHash: send.hash,
-        returnValue: result.returnValue
-          ? scValToNative(result.returnValue)
-          : undefined,
-      };
-    }
-    if (result.status === "FAILED") {
-      throw new ContractCallError("contract_call_failed", result);
-    }
-    await sleep(POLL_INTERVAL_MS);
-  }
-
-  throw new ContractCallError(
-    "contract_call_timeout",
-    `Did not see SUCCESS or FAILED for tx ${send.hash} within ${POLL_TIMEOUT_MS}ms`,
+  // Build an internal timeout signal; if the caller also supplies one (e.g.
+  // `req.signal` to bail on client disconnect), abort on whichever fires first.
+  const controller = new AbortController();
+  const timer = setTimeout(
+    () => controller.abort(new Error(`contract_call_timeout (${POLL_TIMEOUT_MS}ms)`)),
+    POLL_TIMEOUT_MS,
   );
+  const onExternalAbort = () => controller.abort(externalSignal?.reason);
+  if (externalSignal) {
+    if (externalSignal.aborted) controller.abort(externalSignal.reason);
+    else externalSignal.addEventListener("abort", onExternalAbort, { once: true });
+  }
+
+  try {
+    const server = new rpc.Server(rpcUrl);
+    const contract = new Contract(contractId);
+
+    let sourceAccount;
+    try {
+      sourceAccount = await abortable(
+        server.getAccount(signer.publicKey()),
+        controller.signal,
+      );
+    } catch (err) {
+      if (err instanceof ContractCallError) throw err;
+      throw new ContractCallError("source_account_not_found", err);
+    }
+
+    const builtTx = new TransactionBuilder(sourceAccount, {
+      fee: BASE_FEE,
+      networkPassphrase: NETWORK_PASSPHRASE,
+    })
+      .addOperation(contract.call(method, ...args))
+      .setTimeout(30)
+      .build();
+
+    let prepared;
+    try {
+      prepared = await abortable(server.prepareTransaction(builtTx), controller.signal);
+    } catch (err) {
+      if (err instanceof ContractCallError) throw err;
+      // prepareTransaction throws when simulation fails — typically a contract panic.
+      const panicReason = extractPanicReason(err);
+      throw new ContractCallError(panicReason ?? "contract_simulation_failed", err);
+    }
+
+    prepared.sign(signer);
+
+    const send = await abortable(server.sendTransaction(prepared), controller.signal);
+    if (send.status === "ERROR" || send.status === "TRY_AGAIN_LATER") {
+      throw new ContractCallError(`send_${send.status.toLowerCase()}`, send);
+    }
+
+    // PENDING or DUPLICATE → poll until we see SUCCESS / FAILED or the
+    // AbortController fires. No more Date.now() bookkeeping: the timeout and
+    // any external cancel both flow through the same signal.
+    while (!controller.signal.aborted) {
+      const result = await abortable(server.getTransaction(send.hash), controller.signal);
+      if (result.status === "SUCCESS") {
+        return {
+          txHash: send.hash,
+          returnValue: result.returnValue ? scValToNative(result.returnValue) : undefined,
+        };
+      }
+      if (result.status === "FAILED") {
+        throw new ContractCallError("contract_call_failed", result);
+      }
+      await abortable(sleep(POLL_INTERVAL_MS), controller.signal);
+    }
+
+    throw new ContractCallError(
+      "contract_call_timeout",
+      `Did not see SUCCESS or FAILED for tx ${send.hash} within ${POLL_TIMEOUT_MS}ms`,
+    );
+  } finally {
+    clearTimeout(timer);
+    if (externalSignal) externalSignal.removeEventListener("abort", onExternalAbort);
+  }
 }
 
 async function simulateContract(

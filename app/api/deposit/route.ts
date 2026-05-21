@@ -128,7 +128,9 @@ export async function POST(req: Request): Promise<NextResponse> {
   } catch (e) {
     if (e instanceof ContractNotConfiguredError) {
       console.error("[deposit]", e.message);
-      return err(503, "contract_not_configured", e.message);
+      return err(503, "contract_not_configured", e.message, undefined, {
+        retryAfterSeconds: 5,
+      });
     }
     if (e instanceof ContractCallError) {
       console.error("[deposit] contract call failed:", e.reason, e.detail);

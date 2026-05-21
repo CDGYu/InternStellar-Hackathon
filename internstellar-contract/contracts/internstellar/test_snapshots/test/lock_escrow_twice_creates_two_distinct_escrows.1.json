@@ -53,7 +53,7 @@
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
                 },
                 {
-                  "i128": "2000000000"
+                  "i128": "1000000000"
                 }
               ]
             }
@@ -69,10 +69,16 @@
           "function": {
             "contract_fn": {
               "contract_address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
-              "function_name": "release_escrow",
+              "function_name": "lock_escrow",
               "args": [
                 {
-                  "u32": 1
+                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
+                },
+                {
+                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
+                },
+                {
+                  "i128": "500000000"
                 }
               ]
             }
@@ -81,6 +87,7 @@
         }
       ]
     ],
+    [],
     []
   ],
   "ledger": {
@@ -145,7 +152,7 @@
                       "symbol": "amount"
                     },
                     "val": {
-                      "i128": "2000000000"
+                      "i128": "1000000000"
                     }
                   },
                   {
@@ -161,7 +168,67 @@
                       "symbol": "released"
                     },
                     "val": {
-                      "bool": true
+                      "bool": false
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "store"
+                    },
+                    "val": {
+                      "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "ext": "v0"
+        },
+        "live_until": 4095
+      },
+      {
+        "entry": {
+          "last_modified_ledger_seq": 0,
+          "data": {
+            "contract_data": {
+              "ext": "v0",
+              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
+              "key": {
+                "vec": [
+                  {
+                    "symbol": "Escrow"
+                  },
+                  {
+                    "u32": 2
+                  }
+                ]
+              },
+              "durability": "persistent",
+              "val": {
+                "map": [
+                  {
+                    "key": {
+                      "symbol": "amount"
+                    },
+                    "val": {
+                      "i128": "500000000"
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "family"
+                    },
+                    "val": {
+                      "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "released"
+                    },
+                    "val": {
+                      "bool": false
                     }
                   },
                   {
@@ -199,34 +266,7 @@
               },
               "durability": "persistent",
               "val": {
-                "i128": "1000000000"
-              }
-            }
-          },
-          "ext": "v0"
-        },
-        "live_until": 4095
-      },
-      {
-        "entry": {
-          "last_modified_ledger_seq": 0,
-          "data": {
-            "contract_data": {
-              "ext": "v0",
-              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
-              "key": {
-                "vec": [
-                  {
-                    "symbol": "Groc"
-                  },
-                  {
-                    "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
-                  }
-                ]
-              },
-              "durability": "persistent",
-              "val": {
-                "i128": "2000000000"
+                "i128": "1500000000"
               }
             }
           },
@@ -250,7 +290,7 @@
               },
               "durability": "persistent",
               "val": {
-                "u32": 2
+                "u32": 3
               }
             }
           },
