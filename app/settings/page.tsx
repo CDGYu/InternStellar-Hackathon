@@ -37,7 +37,7 @@ export const dynamic = "force-dynamic";
  * they have no dashboard.
  */
 export default async function SettingsPage() {
-  const theme = getTheme();
+  const theme = await getTheme();
 
   // Resolve the back href: dashboardForRole(role) for signed-in users,
   // "/" for signed-out. dashboardForRole already returns "/" on unknown

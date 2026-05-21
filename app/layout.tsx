@@ -38,7 +38,7 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
@@ -46,7 +46,7 @@ export default function RootLayout({
   // Read the theme cookie server-side and apply `.dark` here so the HTML
   // ships pre-themed. Avoids the flash-of-wrong-theme that happens if you
   // detect on the client after hydration. See lib/theme.ts.
-  const theme = getTheme();
+  const theme = await getTheme();
 
   return (
     <html

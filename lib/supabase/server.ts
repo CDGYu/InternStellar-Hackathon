@@ -27,15 +27,14 @@ export function createSupabaseServerClient() {
     );
   }
 
-  const cookieStore = cookies();
-
   return createServerClient(url, anonKey, {
     cookies: {
-      getAll() {
-        return cookieStore.getAll();
+      async getAll() {
+        return (await cookies()).getAll();
       },
-      setAll(cookiesToSet) {
+      async setAll(cookiesToSet) {
         try {
+          const cookieStore = await cookies();
           for (const { name, value, options } of cookiesToSet) {
             cookieStore.set(name, value, options as CookieOptions);
           }

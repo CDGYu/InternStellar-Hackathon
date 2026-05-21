@@ -20,7 +20,7 @@ export async function setThemeAction(formData: FormData) {
   const requested = formData.get("theme") as string | null;
   const next: Theme = requested === "dark" ? "dark" : "light";
 
-  cookies().set(buildThemeCookie(next));
+  (await cookies()).set(buildThemeCookie(next));
 
   // Revalidate the layout — that re-runs getTheme() and the <html>
   // className changes on the next render of any page.

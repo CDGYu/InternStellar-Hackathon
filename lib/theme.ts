@@ -20,8 +20,8 @@ export type Theme = "light" | "dark";
 export const THEME_COOKIE = "internstellar_theme";
 
 /** Read the current theme. Server-only — uses next/headers cookies(). */
-export function getTheme(): Theme {
-  const value = cookies().get(THEME_COOKIE)?.value;
+export async function getTheme(): Promise<Theme> {
+  const value = (await cookies()).get(THEME_COOKIE)?.value;
   return value === "dark" ? "dark" : "light";
 }
 
