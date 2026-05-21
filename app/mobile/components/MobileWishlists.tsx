@@ -2,7 +2,7 @@
 
 import React, { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Package, CheckCircle, Clock } from "lucide-react";
+import { Package, CheckCircle, Clock, Lock } from "lucide-react";
 import { apiPost } from "@/lib/api/client";
 import { formatXlmWithUnit } from "@/lib/format-xlm";
 
@@ -31,6 +31,24 @@ export function MobileWishlists({
     setSubmittingId(wishlistId);
     try {
       const result = await apiPost<any>("/api/escrow/release", {
+        family_id: familyId,
+        wishlist_id: wishlistId,
+      });
+      if (!result.ok) {
+        setError(result.message);
+        return;
+      }
+      startTransition(() => router.refresh());
+    } finally {
+      setSubmittingId(null);
+    }
+  }
+
+  async function lockFunds(wishlistId: string) {
+    setError(null);
+    setSubmittingId(wishlistId);
+    try {
+      const result = await apiPost<any>("/api/escrow/lock", {
         family_id: familyId,
         wishlist_id: wishlistId,
       });
@@ -90,6 +108,28 @@ export function MobileWishlists({
                   onClick={() => confirmDelivery(w.id)}
                   disabled={submittingId === w.id}
                   className="w-full bg-[#10b981] text-white py-3 rounded-2xl font-bold flex justify-center items-center gap-2 shadow-lg shadow-[#10b981]/25 active:scale-[0.98] transition-all"
+                >
+                  {submittingId === w.id ? "Confirming..." : "Confirm Delivery"}
+                  {submittingId !== w.id && <CheckCircle className="w-4 h-4" />}
+                </button>
+              )}
+
+              {isOfw && w.status === "pending_approval" && (
+                <button
+                  onClick={() => lockFunds(w.id)}
+                  disabled={submittingId === w.id}
+                  className="w-full bg-gradient-to-r from-[#5b7cff] to-[#7c9aff] text-white py-3 rounded-2xl font-bold flex justify-center items-center gap-2 shadow-lg shadow-[#5b7cff]/25 active:scale-[0.98] transition-all disabled:opacity-60"
+                >
+                  {submittingId === w.id ? "Locking..." : "Lock funds"}
+                  {submittingId !== w.id && <Lock className="w-4 h-4" />}
+                </button>
+              )}
+
+              {isOfw && (w.status === "locked" || w.status === "delivered") && (
+                <button
+                  onClick={() => confirmDelivery(w.id)}
+                  disabled={submittingId === w.id}
+                  className="w-full bg-[#10b981] text-white py-3 rounded-2xl font-bold flex justify-center items-center gap-2 shadow-lg shadow-[#10b981]/25 active:scale-[0.98] transition-all disabled:opacity-60"
                 >
                   {submittingId === w.id ? "Confirming..." : "Confirm Delivery"}
                   {submittingId !== w.id && <CheckCircle className="w-4 h-4" />}
