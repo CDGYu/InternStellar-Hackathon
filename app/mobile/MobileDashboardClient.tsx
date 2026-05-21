@@ -14,7 +14,8 @@ import {
   Package,
   User,
   ArrowRight,
-  History
+  History,
+  ShoppingBag
 } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
@@ -22,6 +23,7 @@ import { MobileSendFunds } from "./components/MobileSendFunds";
 import { MobileBills } from "./components/MobileBills";
 import { MobileWishlists } from "./components/MobileWishlists";
 import { MobileActivity } from "./components/MobileActivity";
+import { MobileShop } from "./components/MobileShop";
 import { formatXlmWithUnit, formatXlm } from "@/lib/format-xlm";
 
 type MobileDashboardClientProps = {
@@ -41,7 +43,7 @@ const chartData = [
 
 export function MobileDashboardClient({ ofwData, familyData, currentUserRole, currentUserId }: MobileDashboardClientProps) {
   const [activeTab, setActiveTab] = useState<
-    "home" | "send" | "bills" | "orders" | "activity"
+    "home" | "send" | "shop" | "bills" | "orders" | "activity"
   >("home");
 
   // Determine active dataset based on role, but use both if available (God Mode demo).
@@ -202,12 +204,41 @@ export function MobileDashboardClient({ ofwData, familyData, currentUserRole, cu
           </div>
         )}
 
+        {activeTab === "shop" && familyData && (
+          <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+            <MobileShop
+              familyId={familyData.family.id}
+              inventory={familyData.inventory.map((i: any) => ({
+                id: i.id,
+                name: i.name,
+                category: i.category,
+                price_stroops: i.price_stroops.toString(),
+                stock: i.stock,
+                unit: i.unit,
+              }))}
+              initialWishlistId={familyData.activeDraft?.wishlist.id ?? null}
+              initialStatus={familyData.activeDraft?.wishlist.status ?? null}
+              initialItems={
+                familyData.activeDraft?.items.map((it: any) => ({
+                  id: it.id,
+                  inventory_id: it.inventory_id,
+                  inventory_name: it.inventory_name,
+                  inventory_unit: it.inventory_unit,
+                  quantity: it.quantity,
+                  price_stroops_at_add: it.price_stroops_at_add.toString(),
+                })) ?? []
+              }
+              initialEscrowTxHash={familyData.activeDraft?.wishlist.escrow_tx_hash ?? null}
+            />
+          </div>
+        )}
+
         {activeTab === "bills" && (
           <div className="animate-in fade-in slide-in-from-right-4 duration-300">
-            <MobileBills 
+            <MobileBills
               ofwId={ofwData?.ofw.id || currentUserId}
               familyId={familyData?.family.id}
-              bills={ofwData?.bills || familyData?.bills || []} 
+              bills={ofwData?.bills || familyData?.bills || []}
             />
           </div>
         )}
@@ -245,7 +276,11 @@ export function MobileDashboardClient({ ofwData, familyData, currentUserRole, cu
       {/* Bottom Tab Bar */}
       <div className="absolute bottom-0 w-full bg-white border-t border-black/5 px-4 pb-safe pt-3 pb-6 flex justify-between items-center shadow-[0_-10px_40px_rgba(0,0,0,0.03)] z-50">
         <TabItem icon={<Home />} label="Home" active={activeTab === "home"} onClick={() => setActiveTab("home")} />
-        <TabItem icon={<TrendingUp />} label="Send" active={activeTab === "send"} onClick={() => setActiveTab("send")} />
+        {currentUserRole === "family" ? (
+          <TabItem icon={<ShoppingBag />} label="Shop" active={activeTab === "shop"} onClick={() => setActiveTab("shop")} />
+        ) : (
+          <TabItem icon={<TrendingUp />} label="Send" active={activeTab === "send"} onClick={() => setActiveTab("send")} />
+        )}
         <TabItem icon={<CreditCard />} label="Bills" active={activeTab === "bills"} onClick={() => setActiveTab("bills")} />
         <TabItem icon={<Package />} label="Orders" active={activeTab === "orders"} onClick={() => setActiveTab("orders")} />
         <TabItem icon={<History />} label="Activity" active={activeTab === "activity"} onClick={() => setActiveTab("activity")} />
