@@ -243,26 +243,30 @@ export async function loadFamilyDashboard(opts: {
       supabase
         .from("settlement")
         .select(
-          "id, wishlist_id, event_type, tx_hash, amount_stroops, created_at, " +
-            "wishlist:wishlist_id (notes, status)",
+          "id, wishlist_id, event_type, tx_hash, amount_stroops, created_at, wishlist:wishlist_id (notes, status)",
         )
         .in("wishlist_id", wishlistIds)
         .order("created_at", { ascending: false }),
     ]);
 
-    if (itemsResult.error) {
-      throw new Error(`wishlist_item count load failed: ${itemsResult.error.message}`);
+    // Destructure after Promise.all so TS narrows `data` once `error` is
+    // ruled out — accessing `.data` straight off the result keeps the
+    // union with `GenericStringError` and breaks the `.map()` below.
+    const { data: itemsData, error: itemsErr } = itemsResult;
+    const { data: settlementsData, error: settlementsErr } = settlementsResult;
+    if (itemsErr) {
+      throw new Error(`wishlist_item count load failed: ${itemsErr.message}`);
     }
-    if (settlementsResult.error) {
-      throw new Error(`settlement load failed: ${settlementsResult.error.message}`);
+    if (settlementsErr) {
+      throw new Error(`settlement load failed: ${settlementsErr.message}`);
     }
 
-    for (const row of itemsResult.data ?? []) {
+    for (const row of itemsData ?? []) {
       const id = row.wishlist_id as string;
       itemCounts.set(id, (itemCounts.get(id) ?? 0) + 1);
     }
 
-    settlements = (settlementsResult.data ?? []).map((s) => {
+    settlements = (settlementsData ?? []).map((s) => {
       // Supabase nested-join can return either a single object or an
       // array depending on FK shape. Coerce defensively — same pattern
       // the OFW loader uses (see lib/dashboard/ofw.ts).

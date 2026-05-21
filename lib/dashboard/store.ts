@@ -198,23 +198,25 @@ export async function loadStoreDashboard(opts: {
       supabase
         .from("settlement")
         .select(
-          "id, wishlist_id, event_type, tx_hash, amount_stroops, created_at, " +
-            "wishlist:wishlist_id (notes, status)",
+          "id, wishlist_id, event_type, tx_hash, amount_stroops, created_at, wishlist:wishlist_id (notes, status)",
         )
         .in("wishlist_id", ids)
         .order("created_at", { ascending: false }),
     ]);
 
-    if (wishlistResult.error) {
-      throw new Error(`wishlist load failed: ${wishlistResult.error.message}`);
+    // Destructure after Promise.all so TS narrows `data` once `error` is
+    // ruled out — accessing `.data` straight off the result keeps the
+    // union with `GenericStringError` and breaks the `.map()` below.
+    const { data: wishlistData, error: wishlistErr } = wishlistResult;
+    const { data: settlementsData, error: settlementsErr } = settlementsResult;
+    if (wishlistErr) {
+      throw new Error(`wishlist load failed: ${wishlistErr.message}`);
     }
-    if (settlementsResult.error) {
-      throw new Error(
-        `settlement load failed: ${settlementsResult.error.message}`,
-      );
+    if (settlementsErr) {
+      throw new Error(`settlement load failed: ${settlementsErr.message}`);
     }
 
-    orders = (wishlistResult.data ?? []).map((w) => {
+    orders = (wishlistData ?? []).map((w) => {
       const fam = Array.isArray((w as any).family)
         ? (w as any).family[0]
         : (w as any).family;
@@ -233,7 +235,7 @@ export async function loadStoreDashboard(opts: {
       };
     });
 
-    settlements = (settlementsResult.data ?? []).map((s) => {
+    settlements = (settlementsData ?? []).map((s) => {
       const wishlist = Array.isArray((s as any).wishlist)
         ? (s as any).wishlist[0]
         : (s as any).wishlist;
