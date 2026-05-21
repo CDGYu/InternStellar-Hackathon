@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { requireUser } from "../../../lib/api/auth";
 import { err, ok, parseJsonBody } from "../../../lib/api/errors";
+import { beginIdempotent } from "../../../lib/api/idempotency";
 import { newRequestId } from "../../../lib/api/request-id";
 import { getSupabaseAdmin } from "../../../lib/supabase-admin";
 import {
@@ -15,7 +16,7 @@ export const dynamic = "force-dynamic";
 
 interface DepositBody {
   ofw_id: string;
-  total_stroops: string; // bigint-as-string (JSON has no bigint)
+  total_stroops: string;
   pct_util: number;
   pct_groc: number;
   pct_emerg: number;
@@ -84,87 +85,92 @@ export async function POST(req: Request): Promise<NextResponse> {
     return err(403, "forbidden", "Authenticated user does not match ofw_id.", undefined, { requestId });
   }
 
-  // ---- 3. Load OFW's stellar address ------------------------------
-  let supabase;
-  try {
-    supabase = getSupabaseAdmin();
-  } catch (e) {
-    console.error("[deposit] Supabase admin client init failed:", e);
-    return err(500, "server_misconfigured", "Supabase service env vars missing.", undefined, { requestId });
-  }
-
-  const { data: profile, error: pErr } = await supabase
-    .from("profiles")
-    .select("id, role, stellar_public_key")
-    .eq("id", ofw_id)
-    .maybeSingle();
-
-  if (pErr) {
-    console.error("[deposit] profile load failed:", pErr);
-    return err(500, "db_error", "Could not load OFW profile.", undefined, { requestId });
-  }
-  if (!profile) {
-    return err(404, "ofw_not_found", "OFW profile does not exist.", undefined, { requestId });
-  }
-  if (profile.role !== "ofw") {
-    return err(403, "wrong_role", "Only OFW profiles can deposit.", {
-      current_role: profile.role,
-    }, { requestId });
-  }
-  if (!profile.stellar_public_key) {
-    return err(400, "ofw_address_not_set", "OFW profile is missing stellar_public_key.", undefined, { requestId });
-  }
-
-  // ---- 4. Call the contract ---------------------------------------
-  let txHash: string;
-  let shares: { util: bigint; groc: bigint; emerg: bigint };
-  try {
-    const result = await depositAndSplit({
-      fromAddress: profile.stellar_public_key,
-      totalStroops: BigInt(total_stroops),
-      pctUtil: pct_util,
-      pctGroc: pct_groc,
-      pctEmerg: pct_emerg,
+  // ---- 3. Idempotency guard ---------------------------------------
+  // Keys on (ofw, total) — the same OFW sending the same exact amount within
+  // the 60s TTL is treated as a double-submission. If the OFW intentionally
+  // wants to deposit the same amount twice they can wait out the TTL.
+  const idemLock = beginIdempotent(["deposit", ofw_id, total_stroops]);
+  if (!idemLock) {
+    return err(409, "in_flight", "An identical deposit is already being processed.", undefined, {
+      requestId,
+      retryAfterSeconds: 10,
     });
-    txHash = result.txHash;
-    shares = result.shares;
-  } catch (e) {
-    if (e instanceof ContractNotConfiguredError) {
-      console.error("[deposit]", e.message);
-      return err(503, "contract_not_configured", e.message, undefined, {
-        requestId,
-        retryAfterSeconds: 30,
-      });
-    }
-    if (e instanceof ContractCallError) {
-      console.error("[deposit] contract call failed:", e.reason, e.detail);
-      return err(400, "contract_error", e.reason, undefined, { requestId });
-    }
-    console.error("[deposit] unexpected contract error:", e);
-    return err(500, "contract_error", "Unexpected error invoking contract.", undefined, { requestId });
   }
 
-  // ---- 5. Persist Supabase audit row -------------------------------
-  // No wishlist row exists for a deposit (deposits feed buckets, not a wishlist),
-  // so settlement.wishlist_id is left null IF the schema allowed it. The schema
-  // declares wishlist_id NOT NULL, so we skip the settlement write here and rely
-  // on on-chain events as the audit trail for deposits. Lock/release still get
-  // settlement rows because they're tied to a specific wishlist.
-  //
-  // If P4 wants deposits in `settlement`, the schema needs a relaxed FK — flag
-  // it in the next sync. For Day 4 demo, the receipt UI reads deposit info from
-  // the contract's emitted `deposit` event or from get_balances.
+  try {
+    // ---- 4. Load OFW's stellar address ------------------------------
+    let supabase;
+    try {
+      supabase = getSupabaseAdmin();
+    } catch (e) {
+      console.error("[deposit] Supabase admin client init failed:", e);
+      return err(500, "server_misconfigured", "Supabase service env vars missing.", undefined, { requestId });
+    }
 
-  // ---- 6. Respond -------------------------------------------------
-  return ok({
-    tx_hash: txHash,
-    shares: {
-      util_stroops: shares.util.toString(),
-      groc_stroops: shares.groc.toString(),
-      emerg_stroops: shares.emerg.toString(),
-    },
-    total_stroops,
-    percentages: { util: pct_util, groc: pct_groc, emerg: pct_emerg },
-    message: "Deposit split successfully across utilities, groceries, and emergency buckets.",
-  }, { requestId });
+    const { data: profile, error: pErr } = await supabase
+      .from("profiles")
+      .select("id, role, stellar_public_key")
+      .eq("id", ofw_id)
+      .maybeSingle();
+
+    if (pErr) {
+      console.error("[deposit] profile load failed:", pErr);
+      return err(500, "db_error", "Could not load OFW profile.", undefined, { requestId });
+    }
+    if (!profile) {
+      return err(404, "ofw_not_found", "OFW profile does not exist.", undefined, { requestId });
+    }
+    if (profile.role !== "ofw") {
+      return err(403, "wrong_role", "Only OFW profiles can deposit.", {
+        current_role: profile.role,
+      }, { requestId });
+    }
+    if (!profile.stellar_public_key) {
+      return err(400, "ofw_address_not_set", "OFW profile is missing stellar_public_key.", undefined, { requestId });
+    }
+
+    // ---- 5. Call the contract ---------------------------------------
+    let txHash: string;
+    let shares: { util: bigint; groc: bigint; emerg: bigint };
+    try {
+      const result = await depositAndSplit({
+        fromAddress: profile.stellar_public_key,
+        totalStroops: BigInt(total_stroops),
+        pctUtil: pct_util,
+        pctGroc: pct_groc,
+        pctEmerg: pct_emerg,
+      });
+      txHash = result.txHash;
+      shares = result.shares;
+    } catch (e) {
+      if (e instanceof ContractNotConfiguredError) {
+        console.error("[deposit]", e.message);
+        return err(503, "contract_not_configured", e.message, undefined, {
+          requestId,
+          retryAfterSeconds: 30,
+        });
+      }
+      if (e instanceof ContractCallError) {
+        console.error("[deposit] contract call failed:", e.reason, e.detail);
+        return err(400, "contract_error", e.reason, undefined, { requestId });
+      }
+      console.error("[deposit] unexpected contract error:", e);
+      return err(500, "contract_error", "Unexpected error invoking contract.", undefined, { requestId });
+    }
+
+    // ---- 6. Respond -------------------------------------------------
+    return ok({
+      tx_hash: txHash,
+      shares: {
+        util_stroops: shares.util.toString(),
+        groc_stroops: shares.groc.toString(),
+        emerg_stroops: shares.emerg.toString(),
+      },
+      total_stroops,
+      percentages: { util: pct_util, groc: pct_groc, emerg: pct_emerg },
+      message: "Deposit split successfully across utilities, groceries, and emergency buckets.",
+    }, { requestId });
+  } finally {
+    idemLock.release();
+  }
 }
