@@ -10,6 +10,7 @@
     "verify-stellar": "npx tsx scripts/verify-stellar-connection.ts",
     "test:stellar-lib": "npx tsx scripts/_test-stellar-lib.ts",
     "test:escrow-wiring": "npx tsx scripts/_test-escrow-wiring.ts",
+    "test:no-leaks": "npx tsx scripts/_test-no-stacktrace-leak.ts",
     "reset": "npx tsx scripts/reset-demo.ts",
     "reset:db-only": "npx tsx scripts/reset-demo.ts --db-only",
     "setup-billers": "npx tsx scripts/setup-billers.ts"
