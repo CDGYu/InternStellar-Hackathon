@@ -9,6 +9,33 @@ import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 /**
+ * Wrap a Supabase-client-construction call so a missing-env throw becomes a
+ * friendly form error instead of bubbling out of the Server Action and
+ * surfacing as Next.js's opaque "Application error / Digest …" page.
+ *
+ * In normal local/prod operation, every call here returns a real client.
+ * In a misconfigured deploy (env vars unset), `error` is populated with a
+ * one-line reason the caller can render directly in the form.
+ */
+function safeServerClient(): { client: ReturnType<typeof createSupabaseServerClient> | null; error: string | null } {
+  try {
+    return { client: createSupabaseServerClient(), error: null };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Server-side Supabase client could not be created.";
+    return { client: null, error: msg };
+  }
+}
+
+function safeAdminClient(): { client: ReturnType<typeof getSupabaseAdmin> | null; error: string | null } {
+  try {
+    return { client: getSupabaseAdmin(), error: null };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Server-side Supabase admin client could not be created.";
+    return { client: null, error: msg };
+  }
+}
+
+/**
  * For the demo, every OFW and Family signs through the server's shared
  * STELLAR_DEMO_SECRET_KEY (see db/seed.sql comments + lib/stellar/contract.ts).
  * The contract calls `require_auth()` on the from-address, so the profile's
@@ -61,7 +88,15 @@ export async function signInAction(
     return { error: "Email and password are required." };
   }
 
-  const supabase = createSupabaseServerClient();
+  const { client: supabase, error: cfgErr } = safeServerClient();
+  if (cfgErr || !supabase) {
+    return {
+      error:
+        "Deployment not configured: " +
+        (cfgErr ?? "Supabase env vars missing") +
+        " — visit /status for the checklist.",
+    };
+  }
 
   const { data, error } = await supabase.auth.signInWithPassword({
     email,
@@ -73,7 +108,25 @@ export async function signInAction(
 
   // Look up the role via service_role — see lib/auth-role.ts for why we
   // bypass the cookie-bound client here. data.user is already verified.
-  const { profile, error: pErr } = await loadUserProfile(data.user.id);
+  // Wrapped in try/catch because loadUserProfile transitively calls
+  // getSupabaseAdmin(), which throws if SUPABASE_SERVICE_ROLE_KEY is unset
+  // on the deploy. Without this, the throw escapes the Server Action and
+  // surfaces as Next.js's opaque "Application error / Digest …" page.
+  let profile: Awaited<ReturnType<typeof loadUserProfile>>["profile"];
+  let pErr: string | null;
+  try {
+    const lookup = await loadUserProfile(data.user.id);
+    profile = lookup.profile;
+    pErr = lookup.error;
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "profile_lookup_threw";
+    return {
+      error:
+        "Signed in, but profile lookup failed (admin client not configured): " +
+        msg +
+        " — visit /status for the checklist.",
+    };
+  }
   if (pErr) {
     return { error: `Signed in, but profile lookup failed: ${pErr}` };
   }
@@ -94,7 +147,12 @@ export async function signInAction(
  * / so the user isn't stuck on a broken header.
  */
 export async function signOutAction() {
-  const supabase = createSupabaseServerClient();
+  const { client: supabase } = safeServerClient();
+  // If config is broken there's nothing to sign out of — send the user to
+  // /status so they (or the operator) can see why the deploy is degraded.
+  if (!supabase) {
+    redirect("/status");
+  }
   const { error } = await supabase.auth.signOut();
   redirect(error ? "/" : "/login");
 }
@@ -146,7 +204,15 @@ export async function registerAction(
     return { error: "Pick a role: OFW, Family, or Store." };
   }
 
-  const supabase = createSupabaseServerClient();
+  const { client: supabase, error: cfgErr } = safeServerClient();
+  if (cfgErr || !supabase) {
+    return {
+      error:
+        "Deployment not configured: " +
+        (cfgErr ?? "Supabase env vars missing") +
+        " — visit /status for the checklist.",
+    };
+  }
 
   // ---- 1. Create the auth user -------------------------------------
   const { data: signUpData, error: signUpErr } = await supabase.auth.signUp({
@@ -172,7 +238,15 @@ export async function registerAction(
   //     INSERT introduces a flaky failure mode.
   // Service_role bypasses RLS and is the right hammer for "trusted
   // server-side post-signup setup."
-  const admin = getSupabaseAdmin();
+  const { client: admin, error: adminCfgErr } = safeAdminClient();
+  if (adminCfgErr || !admin) {
+    return {
+      error:
+        "Account created in Auth but profile setup failed (admin client not configured): " +
+        (adminCfgErr ?? "SUPABASE_SERVICE_ROLE_KEY missing") +
+        " — visit /status for the checklist.",
+    };
+  }
   // OFW + Family share the demo signer's pubkey so the contract's
   // require_auth() matches. Store doesn't sign anything — leave null.
   const stellarPublicKey =
