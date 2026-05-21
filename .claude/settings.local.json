@@ -3,7 +3,9 @@
     "allow": [
       "Bash(git checkout *)",
       "Bash(git add *)",
-      "Bash(git grep *)"
+      "Bash(git grep *)",
+      "PowerShell(\"stopped\")",
+      "Bash(git merge --no-ff feat/mobile-phase-4 -m ' *)"
     ]
   }
 }
