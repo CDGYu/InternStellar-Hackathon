@@ -62,6 +62,11 @@ export interface StoreSettlementRow {
   tx_hash: string;
   amount_stroops: bigint;
   created_at: string;
+  /** Inlined from the parent wishlist so MobileActivity can label
+   *  rows without a second lookup. Null when the wishlist row is
+   *  gone (settlement is intentionally not cascaded). */
+  wishlist_notes: string | null;
+  wishlist_status: WishlistStatus | null;
 }
 
 /** Used by the store's "Create order on behalf of family" form. */
@@ -193,7 +198,8 @@ export async function loadStoreDashboard(opts: {
       supabase
         .from("settlement")
         .select(
-          "id, wishlist_id, event_type, tx_hash, amount_stroops, created_at",
+          "id, wishlist_id, event_type, tx_hash, amount_stroops, created_at, " +
+            "wishlist:wishlist_id (notes, status)",
         )
         .in("wishlist_id", ids)
         .order("created_at", { ascending: false }),
@@ -227,14 +233,21 @@ export async function loadStoreDashboard(opts: {
       };
     });
 
-    settlements = (settlementsResult.data ?? []).map((s) => ({
-      id: s.id as string,
-      wishlist_id: s.wishlist_id as string,
-      event_type: s.event_type as SettlementEvent,
-      tx_hash: s.tx_hash as string,
-      amount_stroops: toBig(s.amount_stroops),
-      created_at: s.created_at as string,
-    }));
+    settlements = (settlementsResult.data ?? []).map((s) => {
+      const wishlist = Array.isArray((s as any).wishlist)
+        ? (s as any).wishlist[0]
+        : (s as any).wishlist;
+      return {
+        id: s.id as string,
+        wishlist_id: s.wishlist_id as string,
+        event_type: s.event_type as SettlementEvent,
+        tx_hash: s.tx_hash as string,
+        amount_stroops: toBig(s.amount_stroops),
+        created_at: s.created_at as string,
+        wishlist_notes: (wishlist?.notes as string | null) ?? null,
+        wishlist_status: (wishlist?.status as WishlistStatus | null) ?? null,
+      };
+    });
   }
 
   // Split released orders out — they get their own receipts panel rather
