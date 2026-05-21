@@ -153,19 +153,18 @@ Cross-referenced against [`DAY-5-TASKS.md`](DAY-5-TASKS.md).
 
 22 existing tests still green; the four Day-5 additions are the gap.
 
-### P2 (Rene) — ❌ Friendly errors + hardening
+### P2 (Rene) — ✅ Friendly errors + hardening
 
 | Item | Status |
 |---|---|
-| `scripts/_test-no-stacktrace-leak.ts` + `npm run test:no-leaks` | ❌ not created |
-| `GET /api/health` route | ❌ not created |
-| `Retry-After` header on `503 contract_not_configured` | ❌ not added |
-| `request_id` field on every response | ❌ not added |
-| `AbortSignal`-based timeout (replace `Date.now()` polling) | ❌ not added |
-| Idempotency hash on `(family_id, wishlist_id, route)` | ❌ not added |
+| `scripts/_test-no-stacktrace-leak.ts` + `npm run test:no-leaks` | ✅ done (12 probes, 0 leaks) |
+| `GET /api/health` route | ✅ done (`app/api/health/route.ts`) |
+| `Retry-After` header on `503 contract_not_configured` | ✅ done (deposit, escrow/lock, escrow/release, balances, bills/pay all set `Retry-After: 30`; health sets `15`) |
+| `request_id` field on every response | ✅ done (`lib/api/request-id.ts` + every `ok()`/`err()` carries it; `X-Request-Id` response header set; inbound `X-Request-Id` is honored if UUID v4) |
+| `AbortSignal`-based timeout (replace `Date.now()` polling) | ✅ done (`lib/stellar/contract.ts` `invokeContract` uses `AbortController` + `setTimeout(abort, POLL_TIMEOUT_MS)`; `sleep()` honors the signal) |
+| Idempotency hash on `(family_id, wishlist_id, route)` | ✅ done (`lib/api/idempotency.ts` sha256-keyed in-memory tracker, 60s TTL; lock/release/deposit/bills/pay all wrapped) |
 
-Existing error envelope and panic-string mapping cover the basics; the
-above are the Day 5 hardening pass.
+Reference plan: [`DAY5-P2-TASKS.md`](DAY5-P2-TASKS.md). Verification: `npm run test:stellar-lib` (4/4) + `npm run test:escrow-wiring` (11/11) + `npm run test:no-leaks` (12/12).
 
 ### P4 (Charles) — ✅🟡 Reset + pitch + rehearsal
 

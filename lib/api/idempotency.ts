@@ -1,48 +1,53 @@
-// In-process idempotency guard for chain-call routes.
-//
-// Use case: a family member double-clicks the "Lock escrow" button. The first
-// click is mid-flight (10-30s on testnet), the second arrives while the first
-// has not yet returned. Without a guard, both run, both succeed, the wishlist
-// gets two settlement rows and the family is double-debited.
-//
-// This module keeps a Set of in-flight `(route, family_id, wishlist_id)` keys.
-// `acquire(key)` returns a release function if the key is free; returns null
-// if the key is currently held. Routes call `release()` in a `finally` so the
-// guard clears even on errors.
-//
-// Scope: in-process only. A multi-instance deploy would need Redis or similar
-// to coordinate across workers — for the Day 5 hackathon demo a single
-// `next dev` instance is the only thing serving the API, so this is enough.
-// Map state resets on dev-server restart, which is also the right behavior:
-// any in-flight call from a crashed worker is gone.
-
-const inFlight = new Set<string>();
-
-export type IdempotencyKey = string;
+import { createHash } from "node:crypto";
 
 /**
- * Try to acquire a slot for the given key. Returns a `release()` function if
- * the key was free; returns `null` if a request with the same key is already
- * in flight (caller should respond `409 in_flight`).
+ * Server-process-local "is this exact request already in flight?" tracker.
  *
- * The returned `release()` is idempotent — calling it twice is fine.
+ * Use case: family double-clicks "Confirm Delivery". First click hits
+ * /api/escrow/release and starts a 5-10s chain call. Second click MUST
+ * NOT also call release_escrow — the contract would either error
+ * ("escrow already released") OR succeed against the next escrow id if
+ * a race window opens. Either way, the UI shows confusion.
+ *
+ * This module gives every chain-modifying route a single line at the top:
+ *
+ *     const lock = beginIdempotent(["release", family_id, wishlist_id]);
+ *     if (!lock) return err(409, "in_flight", "...", undefined, { requestId, retryAfterSeconds: 10 });
+ *     try { ... do work ... } finally { lock.release(); }
+ *
+ * Storage is in-memory and per-process — fine for the demo's single Node
+ * instance. The Map self-trims via the TTL sweep below so a crashed
+ * handler doesn't deadlock subsequent calls (60s TTL > 30s chain poll
+ * timeout = safe).
  */
-export function acquireIdempotency(key: IdempotencyKey): (() => void) | null {
-  if (inFlight.has(key)) return null;
-  inFlight.add(key);
-  let released = false;
-  return () => {
-    if (released) return;
-    released = true;
-    inFlight.delete(key);
-  };
+
+const inFlight = new Map<string, number>();
+const TTL_MS = 60_000;
+
+function key(parts: ReadonlyArray<string>): string {
+  return createHash("sha256").update(parts.join("|")).digest("hex");
 }
 
-/**
- * Build a stable idempotency key from a route name + ordered identifiers.
- * The route name keeps lock/release in separate namespaces so a release can
- * fire while a different wishlist is still mid-lock.
- */
-export function makeKey(route: string, ...ids: string[]): IdempotencyKey {
-  return `${route}:${ids.join("|")}`;
+export interface IdempotencyLock {
+  release(): void;
+}
+
+/** Returns a lock object on success, or null when the key is already locked. */
+export function beginIdempotent(parts: ReadonlyArray<string>): IdempotencyLock | null {
+  const k = key(parts);
+  const now = Date.now();
+
+  // Lazy sweep: drop stale entries on each call. O(n) but n is tiny.
+  for (const [otherK, expiresAt] of inFlight) {
+    if (expiresAt <= now) inFlight.delete(otherK);
+  }
+
+  if (inFlight.has(k)) return null;
+  inFlight.set(k, now + TTL_MS);
+
+  return {
+    release() {
+      inFlight.delete(k);
+    },
+  };
 }
