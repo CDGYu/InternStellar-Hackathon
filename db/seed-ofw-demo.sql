@@ -96,12 +96,20 @@ values
    'f9e8d7c6b5a4039281706f5e4d3c2b1a09f8e7d6c5b4a39281706f5e4d3c2b1a',
    now() - interval '5 days',
    now() - interval '2 days'),
+  -- NOTE: this row used to seed at status='locked' with a fake
+  -- escrow_tx_hash. After the schema gained the `escrow_id` column,
+  -- /api/escrow/release refuses to release rows whose escrow_id is
+  -- NULL ("Lock recorded but escrow_id was not captured"). A seeded
+  -- "locked" wishlist has no real on-chain escrow so escrow_id stays
+  -- NULL, which traps the row at locked/delivered with no way out.
+  -- Seeding at 'cancelled' keeps the row visible for history queries
+  -- but routes no contract call through it.
   ('b0000000-0000-0000-0000-000000000002',
    '22222222-2222-2222-2222-222222222222',
-   'locked',
+   'cancelled',
    0,
-   'Mid-month groceries — locked, waiting on delivery',
-   '4d5e6f70819203a4b5c6d7e8f90a1b2c3d4e5f6071829304a5b6c7d8e9f0a1b2',
+   'Mid-month groceries — cancelled in seed (no real on-chain escrow)',
+   null,
    null,
    now() - interval '2 days',
    now() - interval '6 hours'),
@@ -208,17 +216,16 @@ values
    1,
    now() - interval '2 days');
 
--- ---- Wishlist 2 (locked): deposit + lock, no release yet -------
-insert into settlement (wishlist_id, event_type, tx_hash, amount_stroops, created_at)
-values
-  ('b0000000-0000-0000-0000-000000000002', 'deposit',
-   '22cdcdcd33efef4455565658696a7b8c9d0e1f2031425364758697a811ababab',
-   1,
-   now() - interval '2 days'),
-  ('b0000000-0000-0000-0000-000000000002', 'lock',
-   '4d5e6f70819203a4b5c6d7e8f90a1b2c3d4e5f6071829304a5b6c7d8e9f0a1b2',
-   1,
-   now() - interval '1 day 22 hours');
+-- ---- Wishlist 2 (cancelled in seed): no settlement rows --------
+-- Used to seed fake deposit + lock events. Removed because the
+-- wishlist is now seeded at status='cancelled' (the row would still
+-- get its escrow_id from a real lock_escrow if anyone tried, but a
+-- cancelled wishlist never triggers that path -- so the fake
+-- settlement entries served no purpose beyond cluttering the
+-- Activity timeline with misleading tx hashes that don't exist
+-- on-chain.
+--
+-- (No insert here.)
 
 -- ---- Wishlist 3 (pending_approval): deposit only ---------------
 insert into settlement (wishlist_id, event_type, tx_hash, amount_stroops, created_at)
