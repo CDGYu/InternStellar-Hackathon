@@ -5,7 +5,18 @@
       "Bash(git add *)",
       "Bash(git grep *)",
       "PowerShell(\"stopped\")",
-      "Bash(git merge --no-ff feat/mobile-phase-4 -m ' *)"
+      "Bash(git merge --no-ff feat/mobile-phase-4 -m ' *)",
+      "Bash(cat)",
+      "Bash(node /tmp/derive-pubkey.mjs)",
+      "mcp__claude_ai_Supabase__list_projects",
+      "mcp__claude_ai_Supabase__execute_sql",
+      "Bash(curl -s -A \"Mozilla/5.0 \\(iPhone\\) Mobile\" -o /dev/null -w \"register=%{http_code}\\\\n\" http://localhost:3000/mobile/register)",
+      "PowerShell(\"killed\")",
+      "Bash(git commit -m ' *)",
+      "Bash(curl -s -A \"Mozilla/5.0 \\(Windows NT 10.0\\) Chrome/120\" -o /dev/null -w \"web-ofw=%{http_code}\\\\n\" http://localhost:3000/ofw)",
+      "Bash(curl -s -A \"Mozilla/5.0 \\(Windows NT 10.0\\) Chrome/120\" -o /dev/null -w \"ofw=%{http_code}\\\\n\" http://localhost:3000/ofw)",
+      "Bash(curl -s -A \"Mozilla/5.0 \\(Windows NT 10.0\\) Chrome/120\" -o /dev/null -w \"family=%{http_code}\\\\n\" http://localhost:3000/family)",
+      "Bash(git merge --no-ff feat/mobile-feedback-fixes -m ' *)"
     ]
   }
 }
