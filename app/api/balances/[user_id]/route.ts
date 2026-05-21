@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { requireUser } from "../../../../lib/api/auth";
 import { err, ok } from "../../../../lib/api/errors";
+import { newRequestId } from "../../../../lib/api/request-id";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
 import {
   ContractCallError,
@@ -33,18 +34,20 @@ interface RouteContext {
 }
 
 export async function GET(req: Request, context: RouteContext): Promise<NextResponse> {
+  const requestId = newRequestId(req);
+
   // ---- 1. Auth -----------------------------------------------------
   const caller = await requireUser(req);
   if (caller instanceof NextResponse) return caller;
 
   const { user_id } = context.params;
   if (!user_id) {
-    return err(400, "invalid_body", "user_id route param is required.");
+    return err(400, "invalid_body", "user_id route param is required.", undefined, { requestId });
   }
   if (caller.userId !== user_id) {
     // Could relax this for store users wanting to verify their grocery
     // bucket post-release, but for now stick to "you can only read your own".
-    return err(403, "forbidden", "Authenticated user does not match user_id.");
+    return err(403, "forbidden", "Authenticated user does not match user_id.", undefined, { requestId });
   }
 
   // ---- 2. Load user's stellar address ------------------------------
@@ -53,7 +56,7 @@ export async function GET(req: Request, context: RouteContext): Promise<NextResp
     supabase = getSupabaseAdmin();
   } catch (e) {
     console.error("[balances] Supabase admin client init failed:", e);
-    return err(500, "server_misconfigured", "Supabase service env vars missing.");
+    return err(500, "server_misconfigured", "Supabase service env vars missing.", undefined, { requestId });
   }
 
   const { data: profile, error: pErr } = await supabase
@@ -64,13 +67,13 @@ export async function GET(req: Request, context: RouteContext): Promise<NextResp
 
   if (pErr) {
     console.error("[balances] profile load failed:", pErr);
-    return err(500, "db_error", "Could not load profile.");
+    return err(500, "db_error", "Could not load profile.", undefined, { requestId });
   }
   if (!profile) {
-    return err(404, "user_not_found", "Profile does not exist.");
+    return err(404, "user_not_found", "Profile does not exist.", undefined, { requestId });
   }
   if (!profile.stellar_public_key) {
-    return err(400, "address_not_set", "Profile is missing stellar_public_key.");
+    return err(400, "address_not_set", "Profile is missing stellar_public_key.", undefined, { requestId });
   }
 
   // ---- 3. Call the contract ---------------------------------------
@@ -80,14 +83,17 @@ export async function GET(req: Request, context: RouteContext): Promise<NextResp
   } catch (e) {
     if (e instanceof ContractNotConfiguredError) {
       console.error("[balances]", e.message);
-      return err(503, "contract_not_configured", e.message);
+      return err(503, "contract_not_configured", e.message, undefined, {
+        requestId,
+        retryAfterSeconds: 30,
+      });
     }
     if (e instanceof ContractCallError) {
       console.error("[balances] contract call failed:", e.reason, e.detail);
-      return err(400, "contract_error", e.reason);
+      return err(400, "contract_error", e.reason, undefined, { requestId });
     }
     console.error("[balances] unexpected contract error:", e);
-    return err(500, "contract_error", "Unexpected error invoking contract.");
+    return err(500, "contract_error", "Unexpected error invoking contract.", undefined, { requestId });
   }
 
   // ---- 4. Respond -------------------------------------------------
@@ -105,5 +111,5 @@ export async function GET(req: Request, context: RouteContext): Promise<NextResp
       groceries: stroopsToXlmDisplay(balances.groc),
       emergency: stroopsToXlmDisplay(balances.emerg),
     },
-  });
+  }, { requestId });
 }

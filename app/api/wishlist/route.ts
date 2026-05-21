@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { requireUser } from "../../../lib/api/auth";
 import { err, ok, parseJsonBody } from "../../../lib/api/errors";
+import { newRequestId } from "../../../lib/api/request-id";
 import { getSupabaseAdmin } from "../../../lib/supabase-admin";
 
 export const runtime = "nodejs";
@@ -48,6 +49,8 @@ function validateBody(body: Record<string, unknown>): WishlistBody | string {
 }
 
 export async function POST(req: Request): Promise<NextResponse> {
+  const requestId = newRequestId(req);
+
   // ---- 1. Auth -----------------------------------------------------
   const caller = await requireUser(req);
   if (caller instanceof NextResponse) return caller;
@@ -57,12 +60,12 @@ export async function POST(req: Request): Promise<NextResponse> {
   if (parsed instanceof NextResponse) return parsed;
   const validation = validateBody(parsed);
   if (typeof validation === "string") {
-    return err(400, "invalid_body", validation);
+    return err(400, "invalid_body", validation, undefined, { requestId });
   }
   const { family_id, items, notes } = validation;
 
   if (caller.userId !== family_id) {
-    return err(403, "forbidden", "Authenticated user does not match family_id.");
+    return err(403, "forbidden", "Authenticated user does not match family_id.", undefined, { requestId });
   }
 
   let supabase;
@@ -70,7 +73,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     supabase = getSupabaseAdmin();
   } catch (e) {
     console.error("[wishlist] Supabase admin client init failed:", e);
-    return err(500, "server_misconfigured", "Supabase service env vars missing.");
+    return err(500, "server_misconfigured", "Supabase service env vars missing.", undefined, { requestId });
   }
 
   // ---- 3. Load inventory rows (validate existence + snapshot price) -
@@ -82,19 +85,19 @@ export async function POST(req: Request): Promise<NextResponse> {
 
   if (invErr) {
     console.error("[wishlist] inventory load failed:", invErr);
-    return err(500, "db_error", "Could not load inventory.");
+    return err(500, "db_error", "Could not load inventory.", undefined, { requestId });
   }
   if (!inv || inv.length !== inventoryIds.length) {
     const found = new Set((inv ?? []).map((r) => r.id));
     const missing = inventoryIds.filter((id) => !found.has(id));
-    return err(404, "inventory_not_found", "One or more items do not exist.", { missing });
+    return err(404, "inventory_not_found", "One or more items do not exist.", { missing }, { requestId });
   }
 
   // Day 4 demo is single-store. Enforce that here so the lock route doesn't
   // have to surface multiple_stores later.
   const storeIds = new Set(inv.map((row) => row.store_id));
   if (storeIds.size > 1) {
-    return err(409, "multiple_stores", "All wishlist items must come from the same store.");
+    return err(409, "multiple_stores", "All wishlist items must come from the same store.", undefined, { requestId });
   }
 
   // Stock check (best-effort — the contract is the source of truth for funds,
@@ -107,7 +110,7 @@ export async function POST(req: Request): Promise<NextResponse> {
         inventory_id: it.inventory_id,
         requested: it.quantity,
         available: row.stock,
-      });
+      }, { requestId });
     }
   }
 
@@ -130,7 +133,7 @@ export async function POST(req: Request): Promise<NextResponse> {
 
   if (wlErr || !created) {
     console.error("[wishlist] wishlist insert failed:", wlErr);
-    return err(500, "db_error", "Could not create wishlist.");
+    return err(500, "db_error", "Could not create wishlist.", undefined, { requestId });
   }
 
   const itemRows = items.map((it) => ({
@@ -146,7 +149,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     console.error("[wishlist] wishlist_item insert failed:", itemErr);
     // Compensating delete so we don't leave an empty wishlist row.
     await supabase.from("wishlist").delete().eq("id", created.id);
-    return err(500, "db_error", "Could not create wishlist items.");
+    return err(500, "db_error", "Could not create wishlist items.", undefined, { requestId });
   }
 
   // ---- 5. Respond -------------------------------------------------
@@ -158,5 +161,5 @@ export async function POST(req: Request): Promise<NextResponse> {
     item_count: items.length,
     notes: created.notes,
     message: "Wishlist created. Family can now request approval / lock escrow.",
-  });
+  }, { requestId });
 }

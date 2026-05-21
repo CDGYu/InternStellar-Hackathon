@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { requireUser } from "../../../../lib/api/auth";
 import { err, ok, parseJsonBody } from "../../../../lib/api/errors";
+import { newRequestId } from "../../../../lib/api/request-id";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
 import {
   ContractCallError,
@@ -40,6 +41,8 @@ function extractStashedEscrowId(notes: string | null): unknown {
 }
 
 export async function POST(req: Request): Promise<NextResponse> {
+  const requestId = newRequestId(req);
+
   // ---- 1. Auth -----------------------------------------------------
   const caller = await requireUser(req);
   if (caller instanceof NextResponse) return caller;
@@ -49,7 +52,7 @@ export async function POST(req: Request): Promise<NextResponse> {
   if (parsed instanceof NextResponse) return parsed;
   const validation = validateBody(parsed);
   if (typeof validation === "string") {
-    return err(400, "invalid_body", validation);
+    return err(400, "invalid_body", validation, undefined, { requestId });
   }
   const { family_id, wishlist_id } = validation;
 
@@ -59,7 +62,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     supabase = getSupabaseAdmin();
   } catch (e) {
     console.error("[escrow/release] Supabase admin client init failed:", e);
-    return err(500, "server_misconfigured", "Supabase service env vars missing.");
+    return err(500, "server_misconfigured", "Supabase service env vars missing.", undefined, { requestId });
   }
 
   // Auth check: caller must be the family themselves, OR an OFW.
@@ -75,10 +78,10 @@ export async function POST(req: Request): Promise<NextResponse> {
       .maybeSingle();
     if (cpErr) {
       console.error("[escrow/release] caller profile lookup failed:", cpErr);
-      return err(500, "db_error", "Could not verify caller role.");
+      return err(500, "db_error", "Could not verify caller role.", undefined, { requestId });
     }
     if (callerProfile?.role !== "ofw") {
-      return err(403, "forbidden", "Caller must be the family or an OFW.");
+      return err(403, "forbidden", "Caller must be the family or an OFW.", undefined, { requestId });
     }
   }
 
@@ -91,24 +94,24 @@ export async function POST(req: Request): Promise<NextResponse> {
 
   if (wErr) {
     console.error("[escrow/release] wishlist load failed:", wErr);
-    return err(500, "db_error", "Could not load wishlist.");
+    return err(500, "db_error", "Could not load wishlist.", undefined, { requestId });
   }
   if (!wishlist) {
-    return err(404, "wishlist_not_found");
+    return err(404, "wishlist_not_found", undefined, undefined, { requestId });
   }
   if (wishlist.status !== "delivered") {
     return err(409, "invalid_status", undefined, {
       current: wishlist.status,
       expected: "delivered",
-    });
+    }, { requestId });
   }
   if (wishlist.release_tx_hash) {
     return err(409, "already_released", "Wishlist already has a release tx hash.", {
       release_tx_hash: wishlist.release_tx_hash,
-    });
+    }, { requestId });
   }
   if (!wishlist.escrow_tx_hash) {
-    return err(409, "no_escrow", "Wishlist is marked delivered but has no escrow tx hash.");
+    return err(409, "no_escrow", "Wishlist is marked delivered but has no escrow tx hash.", undefined, { requestId });
   }
 
   // ---- 4. Call the contract ---------------------------------------
@@ -122,14 +125,17 @@ export async function POST(req: Request): Promise<NextResponse> {
   } catch (e) {
     if (e instanceof ContractNotConfiguredError) {
       console.error("[escrow/release]", e.message);
-      return err(503, "contract_not_configured", e.message);
+      return err(503, "contract_not_configured", e.message, undefined, {
+        requestId,
+        retryAfterSeconds: 30,
+      });
     }
     if (e instanceof ContractCallError) {
       console.error("[escrow/release] contract call failed:", e.reason, e.detail);
-      return err(400, "contract_error", e.reason);
+      return err(400, "contract_error", e.reason, undefined, { requestId });
     }
     console.error("[escrow/release] unexpected contract error:", e);
-    return err(500, "contract_error", "Unexpected error invoking contract.");
+    return err(500, "contract_error", "Unexpected error invoking contract.", undefined, { requestId });
   }
 
   // ---- 5. Persist Supabase state ---------------------------------
@@ -146,7 +152,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     console.error("[escrow/release] wishlist update failed AFTER successful contract call:", updErr);
     return err(500, "db_error", "Funds released on-chain but DB update failed. Reconcile from settlement.", {
       tx_hash: txHash,
-    });
+    }, { requestId });
   }
 
   const { error: setErr } = await supabase.from("settlement").insert({
@@ -185,5 +191,5 @@ export async function POST(req: Request): Promise<NextResponse> {
     message: inventoryFinalized
       ? "Payment released to store. Thank you!"
       : "Payment released, but inventory decrement failed. P4 audit job will reconcile.",
-  });
+  }, { requestId });
 }

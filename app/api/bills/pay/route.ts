@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { requireUser } from "../../../../lib/api/auth";
 import { err, ok, parseJsonBody } from "../../../../lib/api/errors";
+import { newRequestId } from "../../../../lib/api/request-id";
 import {
   BillPaymentError,
   BillsNotConfiguredError,
@@ -49,6 +50,8 @@ function validateBody(body: Record<string, unknown>): PayBillBody | string {
 }
 
 export async function POST(req: Request): Promise<NextResponse> {
+  const requestId = newRequestId(req);
+
   // ---- 1. Auth ------------------------------------------------------
   const caller = await requireUser(req);
   if (caller instanceof NextResponse) return caller;
@@ -58,12 +61,12 @@ export async function POST(req: Request): Promise<NextResponse> {
   if (parsed instanceof NextResponse) return parsed;
   const validation = validateBody(parsed);
   if (typeof validation === "string") {
-    return err(400, "invalid_body", validation);
+    return err(400, "invalid_body", validation, undefined, { requestId });
   }
   const { ofw_id, bill_id } = validation;
 
   if (caller.userId !== ofw_id) {
-    return err(403, "forbidden", "Authenticated user does not match ofw_id.");
+    return err(403, "forbidden", "Authenticated user does not match ofw_id.", undefined, { requestId });
   }
 
   let supabase;
@@ -71,7 +74,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     supabase = getSupabaseAdmin();
   } catch (e) {
     console.error("[bills/pay] Supabase admin init failed:", e);
-    return err(500, "server_misconfigured", "Supabase service env vars missing.");
+    return err(500, "server_misconfigured", "Supabase service env vars missing.", undefined, { requestId });
   }
 
   // Caller must be an OFW. Mirrors the loosened escrow-route check —
@@ -83,12 +86,12 @@ export async function POST(req: Request): Promise<NextResponse> {
     .maybeSingle();
   if (cpErr) {
     console.error("[bills/pay] caller profile lookup failed:", cpErr);
-    return err(500, "db_error", "Could not verify caller role.");
+    return err(500, "db_error", "Could not verify caller role.", undefined, { requestId });
   }
   if (callerProfile?.role !== "ofw") {
     return err(403, "wrong_role", "Only OFW callers can pay bills.", {
       current_role: callerProfile?.role,
-    });
+    }, { requestId });
   }
 
   // ---- 3. Load bill + biller --------------------------------------
@@ -101,11 +104,11 @@ export async function POST(req: Request): Promise<NextResponse> {
     .maybeSingle();
   if (bErr) {
     console.error("[bills/pay] bill load failed:", bErr);
-    return err(500, "db_error", "Could not load bill.");
+    return err(500, "db_error", "Could not load bill.", undefined, { requestId });
   }
-  if (!bill) return err(404, "bill_not_found");
+  if (!bill) return err(404, "bill_not_found", undefined, undefined, { requestId });
   if (bill.status === "paid") {
-    return err(409, "already_paid", "This bill has already been settled.");
+    return err(409, "already_paid", "This bill has already been settled.", undefined, { requestId });
   }
 
   const biller = Array.isArray((bill as any).biller)
@@ -117,6 +120,7 @@ export async function POST(req: Request): Promise<NextResponse> {
       "biller_not_configured",
       "Biller's Stellar address is missing. Run `npm run setup-billers`.",
       { biller_id: bill.biller_id },
+      { requestId },
     );
   }
 
@@ -131,14 +135,17 @@ export async function POST(req: Request): Promise<NextResponse> {
   } catch (e) {
     if (e instanceof BillsNotConfiguredError) {
       console.error("[bills/pay]", e.message);
-      return err(503, "stellar_not_configured", e.message);
+      return err(503, "stellar_not_configured", e.message, undefined, {
+        requestId,
+        retryAfterSeconds: 30,
+      });
     }
     if (e instanceof BillPaymentError) {
       console.error("[bills/pay] payment failed:", e.reason, e.detail);
-      return err(400, "payment_error", e.reason);
+      return err(400, "payment_error", e.reason, undefined, { requestId });
     }
     console.error("[bills/pay] unexpected error:", e);
-    return err(500, "payment_error", "Unexpected error submitting payment.");
+    return err(500, "payment_error", "Unexpected error submitting payment.", undefined, { requestId });
   }
 
   // ---- 5. Append bill_payment row ---------------------------------
@@ -161,6 +168,7 @@ export async function POST(req: Request): Promise<NextResponse> {
       "db_error",
       "Payment submitted on-chain but audit row failed. Reconcile from tx.",
       { tx_hash: txHash },
+      { requestId },
     );
   }
 
@@ -177,6 +185,7 @@ export async function POST(req: Request): Promise<NextResponse> {
       "db_error",
       "Payment recorded but bill status didn't flip. Reconcile from bill_payment.",
       { tx_hash: txHash, bill_payment_id: payment.id },
+      { requestId },
     );
   }
 
@@ -188,5 +197,5 @@ export async function POST(req: Request): Promise<NextResponse> {
     amount_stroops: bill.amount_stroops?.toString() ?? "0",
     paid_at: payment.paid_at as string,
     message: `Bill paid to ${biller.name}.`,
-  });
+  }, { requestId });
 }

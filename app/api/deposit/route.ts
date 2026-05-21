@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { requireUser } from "../../../lib/api/auth";
 import { err, ok, parseJsonBody } from "../../../lib/api/errors";
+import { newRequestId } from "../../../lib/api/request-id";
 import { getSupabaseAdmin } from "../../../lib/supabase-admin";
 import {
   ContractCallError,
@@ -64,6 +65,8 @@ function validateBody(body: Record<string, unknown>): DepositBody | string {
 }
 
 export async function POST(req: Request): Promise<NextResponse> {
+  const requestId = newRequestId(req);
+
   // ---- 1. Auth -----------------------------------------------------
   const caller = await requireUser(req);
   if (caller instanceof NextResponse) return caller;
@@ -73,12 +76,12 @@ export async function POST(req: Request): Promise<NextResponse> {
   if (parsed instanceof NextResponse) return parsed;
   const validation = validateBody(parsed);
   if (typeof validation === "string") {
-    return err(400, "invalid_body", validation);
+    return err(400, "invalid_body", validation, undefined, { requestId });
   }
   const { ofw_id, total_stroops, pct_util, pct_groc, pct_emerg } = validation;
 
   if (caller.userId !== ofw_id) {
-    return err(403, "forbidden", "Authenticated user does not match ofw_id.");
+    return err(403, "forbidden", "Authenticated user does not match ofw_id.", undefined, { requestId });
   }
 
   // ---- 3. Load OFW's stellar address ------------------------------
@@ -87,7 +90,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     supabase = getSupabaseAdmin();
   } catch (e) {
     console.error("[deposit] Supabase admin client init failed:", e);
-    return err(500, "server_misconfigured", "Supabase service env vars missing.");
+    return err(500, "server_misconfigured", "Supabase service env vars missing.", undefined, { requestId });
   }
 
   const { data: profile, error: pErr } = await supabase
@@ -98,18 +101,18 @@ export async function POST(req: Request): Promise<NextResponse> {
 
   if (pErr) {
     console.error("[deposit] profile load failed:", pErr);
-    return err(500, "db_error", "Could not load OFW profile.");
+    return err(500, "db_error", "Could not load OFW profile.", undefined, { requestId });
   }
   if (!profile) {
-    return err(404, "ofw_not_found", "OFW profile does not exist.");
+    return err(404, "ofw_not_found", "OFW profile does not exist.", undefined, { requestId });
   }
   if (profile.role !== "ofw") {
     return err(403, "wrong_role", "Only OFW profiles can deposit.", {
       current_role: profile.role,
-    });
+    }, { requestId });
   }
   if (!profile.stellar_public_key) {
-    return err(400, "ofw_address_not_set", "OFW profile is missing stellar_public_key.");
+    return err(400, "ofw_address_not_set", "OFW profile is missing stellar_public_key.", undefined, { requestId });
   }
 
   // ---- 4. Call the contract ---------------------------------------
@@ -128,14 +131,17 @@ export async function POST(req: Request): Promise<NextResponse> {
   } catch (e) {
     if (e instanceof ContractNotConfiguredError) {
       console.error("[deposit]", e.message);
-      return err(503, "contract_not_configured", e.message);
+      return err(503, "contract_not_configured", e.message, undefined, {
+        requestId,
+        retryAfterSeconds: 30,
+      });
     }
     if (e instanceof ContractCallError) {
       console.error("[deposit] contract call failed:", e.reason, e.detail);
-      return err(400, "contract_error", e.reason);
+      return err(400, "contract_error", e.reason, undefined, { requestId });
     }
     console.error("[deposit] unexpected contract error:", e);
-    return err(500, "contract_error", "Unexpected error invoking contract.");
+    return err(500, "contract_error", "Unexpected error invoking contract.", undefined, { requestId });
   }
 
   // ---- 5. Persist Supabase audit row -------------------------------
@@ -160,5 +166,5 @@ export async function POST(req: Request): Promise<NextResponse> {
     total_stroops,
     percentages: { util: pct_util, groc: pct_groc, emerg: pct_emerg },
     message: "Deposit split successfully across utilities, groceries, and emergency buckets.",
-  });
+  }, { requestId });
 }
