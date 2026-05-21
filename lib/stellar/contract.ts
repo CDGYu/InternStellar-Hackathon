@@ -162,22 +162,34 @@ async function invokeContract(
     );
   }
 
-  // PENDING or DUPLICATE → poll
-  const deadline = Date.now() + POLL_TIMEOUT_MS;
-  while (Date.now() < deadline) {
-    const result = await server.getTransaction(send.hash);
-    if (result.status === "SUCCESS") {
-      return {
-        txHash: send.hash,
-        returnValue: result.returnValue
-          ? scValToNative(result.returnValue)
-          : undefined,
-      };
+  // PENDING or DUPLICATE → poll until SUCCESS, FAILED, or the AbortSignal fires.
+  // Why AbortSignal vs Date.now(): Date.now() only short-circuits the next
+  // loop iteration — a slow in-flight `getTransaction` keeps running for
+  // tens of seconds and wedges a Next.js server action. AbortSignal at least
+  // prevents us from starting a fresh `getTransaction` after timeout (the
+  // SDK doesn't accept the signal directly in 12.3.0, so the cancel is at
+  // the JS-loop layer rather than the network layer — still better than
+  // burning more wall clock after the deadline).
+  const ac = new AbortController();
+  const timeoutHandle = setTimeout(() => ac.abort(), POLL_TIMEOUT_MS);
+  try {
+    while (!ac.signal.aborted) {
+      const result = await server.getTransaction(send.hash);
+      if (result.status === "SUCCESS") {
+        return {
+          txHash: send.hash,
+          returnValue: result.returnValue
+            ? scValToNative(result.returnValue)
+            : undefined,
+        };
+      }
+      if (result.status === "FAILED") {
+        throw new ContractCallError("contract_call_failed", result);
+      }
+      await sleep(POLL_INTERVAL_MS, ac.signal);
     }
-    if (result.status === "FAILED") {
-      throw new ContractCallError("contract_call_failed", result);
-    }
-    await sleep(POLL_INTERVAL_MS);
+  } finally {
+    clearTimeout(timeoutHandle);
   }
 
   throw new ContractCallError(
@@ -234,8 +246,19 @@ function extractPanicReason(err: unknown): string | null {
   return match?.[1] ?? null;
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((r) => setTimeout(r, ms));
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    if (signal?.aborted) return resolve();
+    const handle = setTimeout(() => {
+      if (signal) signal.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(handle);
+      resolve();
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
 }
 
 // ------------------------------------------------------------------
