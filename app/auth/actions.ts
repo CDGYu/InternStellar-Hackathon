@@ -164,6 +164,23 @@ export async function registerAction(
     return { error: "Sign-up succeeded but no user was returned." };
   }
 
+  // Supabase email-enumeration protection: when email confirmation is on
+  // AND the email already exists in auth.users, signUp returns a synthetic
+  // user object with an empty `identities` array (and no real auth.users
+  // row). If we let this fall through to the profile insert below, the
+  // foreign key on profiles.id → auth.users.id will reject it. Surface a
+  // friendly message and return.
+  if (
+    signUpData.user.identities !== undefined &&
+    signUpData.user.identities !== null &&
+    signUpData.user.identities.length === 0
+  ) {
+    return {
+      error:
+        "An account with this email already exists. Try signing in instead.",
+    };
+  }
+
   // ---- 2. Insert the profile row via service_role ------------------
   // We can't rely on cookie-bound writes here because:
   //   - If the project requires email confirmation, signUp returns the
