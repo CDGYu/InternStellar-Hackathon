@@ -1,12 +1,8 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 
-import { dashboardForRole } from "@/app/auth/role-routes";
 import { BackToHomeButton } from "@/components/ui/BackToHomeButton";
 import { Card } from "@/components/ui/Card";
 import { CheckCircleIcon, SparkleIcon } from "@/components/ui/icons";
-import { loadUserProfile } from "@/lib/auth-role";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 import { LoginForm } from "./LoginForm";
 
@@ -16,9 +12,11 @@ export const dynamic = "force-dynamic";
  * Sign-in page. Server component — the only interactive piece is
  * <LoginForm>, which is a client component.
  *
- * If you're already signed in, this redirects you straight to your
- * role's page (or back to /). Avoids the dead-end where a signed-in user
- * sees a login form and assumes they need to sign in again.
+ * We deliberately do NOT auto-redirect signed-in users to their dashboard
+ * here. Clicking "Log in" from the marketing page should land on the form,
+ * even mid-session — useful for switching accounts during the demo and for
+ * recovering from a stale auth cookie. Signing in over an existing session
+ * just replaces the Supabase session.
  *
  * Search params:
  *   ?registered=1 — shown after successful signup that needs email
@@ -29,16 +27,6 @@ export default async function LoginPage({
 }: {
   searchParams?: { registered?: string };
 }) {
-  const supabase = createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (user) {
-    const { profile } = await loadUserProfile(user.id);
-    redirect(dashboardForRole(profile?.role));
-  }
-
   const justRegistered = searchParams?.registered === "1";
 
   return (

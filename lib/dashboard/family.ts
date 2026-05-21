@@ -67,6 +67,27 @@ export interface WishlistLineItem {
   price_stroops_at_add: bigint;
 }
 
+/** Biller row used by the "Add a bill" picker. Mirrors lib/dashboard/ofw.ts. */
+export interface BillerOption {
+  id: string;
+  name: string;
+  category: string;
+  stellar_address: string | null;
+}
+
+export type BillStatus = "due" | "paid" | "overdue";
+
+export interface FamilyBillRow {
+  id: string;
+  biller: BillerOption;
+  account_number: string;
+  amount_stroops: bigint;
+  /** ISO YYYY-MM-DD. */
+  due_date: string;
+  status: BillStatus;
+  autopay_enabled: boolean;
+}
+
 export interface ActiveDraft {
   wishlist: FamilyWishlistRow;
   items: WishlistLineItem[];
@@ -92,6 +113,10 @@ export interface FamilyDashboardData {
   /** Store's full inventory — feeds the WishlistBuilder grid. */
   inventory: InventoryItem[];
   activity: FamilySettlementRow[];
+  /** Curated billers (Meralco, Maynilad, …) — feeds the "Add a bill" picker. */
+  billers: BillerOption[];
+  /** This family's bills — read-only list under the Add form. */
+  bills: FamilyBillRow[];
 }
 
 function toBig(value: unknown): bigint {
@@ -106,30 +131,83 @@ export async function loadFamilyDashboard(opts: {
 }): Promise<FamilyDashboardData> {
   const supabase = getSupabaseAdmin();
 
-  // ---- 1. Family profile + wishlists + inventory (parallel) ---------
-  const [profileResult, wishlistResult, inventoryResult] = await Promise.all([
-    supabase
-      .from("profiles")
-      .select("id, display_name, country")
-      .eq("id", opts.familyId)
-      .maybeSingle(),
-    supabase
-      .from("wishlist")
-      .select(
-        "id, status, total_stroops, notes, escrow_tx_hash, release_tx_hash, created_at, updated_at",
-      )
-      .eq("family_id", opts.familyId)
-      .order("updated_at", { ascending: false }),
-    supabase
-      .from("inventory")
-      .select("id, store_id, name, category, price_stroops, stock, unit")
-      .order("category", { ascending: true })
-      .order("name", { ascending: true }),
-  ]);
+  // ---- 1. Family profile + wishlists + inventory + billers + bills (parallel) ---------
+  const [profileResult, wishlistResult, inventoryResult, billersResult, billsResult] =
+    await Promise.all([
+      supabase
+        .from("profiles")
+        .select("id, display_name, country")
+        .eq("id", opts.familyId)
+        .maybeSingle(),
+      supabase
+        .from("wishlist")
+        .select(
+          "id, status, total_stroops, notes, escrow_tx_hash, release_tx_hash, created_at, updated_at",
+        )
+        .eq("family_id", opts.familyId)
+        .order("updated_at", { ascending: false }),
+      supabase
+        .from("inventory")
+        .select("id, store_id, name, category, price_stroops, stock, unit")
+        .order("category", { ascending: true })
+        .order("name", { ascending: true }),
+      supabase
+        .from("biller")
+        .select("id, name, category, stellar_address")
+        .order("name", { ascending: true }),
+      supabase
+        .from("bill")
+        .select(
+          "id, account_number, amount_stroops, due_date, status, autopay_enabled, biller:biller_id (id, name, category, stellar_address)",
+        )
+        .eq("family_id", opts.familyId)
+        .order("due_date", { ascending: true }),
+    ]);
 
   if (profileResult.error) throw new Error(`family profile load failed: ${profileResult.error.message}`);
   if (wishlistResult.error) throw new Error(`wishlist load failed: ${wishlistResult.error.message}`);
   if (inventoryResult.error) throw new Error(`inventory load failed: ${inventoryResult.error.message}`);
+  // Bills tables are additive — surface a clear setup hint if they're not
+  // applied yet. Don't break the rest of the dashboard.
+  let billers: BillerOption[] = [];
+  let bills: FamilyBillRow[] = [];
+  const billsTablesMissing = (msg: string | undefined): boolean =>
+    !!msg && msg.includes("relation") && msg.includes("does not exist");
+  if (billersResult.error && !billsTablesMissing(billersResult.error.message)) {
+    throw new Error(`biller load failed: ${billersResult.error.message}`);
+  }
+  if (billsResult.error && !billsTablesMissing(billsResult.error.message)) {
+    throw new Error(`bills load failed: ${billsResult.error.message}`);
+  }
+  if (!billersResult.error) {
+    billers = (billersResult.data ?? []).map((row) => ({
+      id: row.id as string,
+      name: row.name as string,
+      category: row.category as string,
+      stellar_address: (row.stellar_address as string | null) ?? null,
+    }));
+  }
+  if (!billsResult.error) {
+    bills = (billsResult.data ?? []).map((row) => {
+      const b = Array.isArray((row as any).biller)
+        ? (row as any).biller[0]
+        : (row as any).biller;
+      return {
+        id: row.id as string,
+        biller: {
+          id: (b?.id as string) ?? "",
+          name: (b?.name as string) ?? "Unknown biller",
+          category: (b?.category as string) ?? "",
+          stellar_address: (b?.stellar_address as string | null) ?? null,
+        },
+        account_number: row.account_number as string,
+        amount_stroops: toBig(row.amount_stroops),
+        due_date: row.due_date as string,
+        status: row.status as BillStatus,
+        autopay_enabled: Boolean(row.autopay_enabled),
+      };
+    });
+  }
 
   const family = profileResult.data;
   if (!family) {
@@ -284,5 +362,7 @@ export async function loadFamilyDashboard(opts: {
     activeDraft,
     inventory,
     activity: settlements.slice(0, 10),
+    billers,
+    bills,
   };
 }

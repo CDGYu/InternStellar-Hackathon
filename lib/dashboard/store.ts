@@ -64,6 +64,13 @@ export interface StoreSettlementRow {
   created_at: string;
 }
 
+/** Used by the store's "Create order on behalf of family" form. */
+export interface StoreFamilyOption {
+  id: string;
+  display_name: string;
+  country: string | null;
+}
+
 export interface StoreDashboardData {
   store: StoreProfile;
   totals: {
@@ -82,6 +89,8 @@ export interface StoreDashboardData {
   receipts: StoreReceipt[];
   inventory: StoreInventoryRow[];
   activity: StoreSettlementRow[];
+  /** All family profiles — feeds the "Create order on behalf of family" picker. */
+  families: StoreFamilyOption[];
 }
 
 function toBig(value: unknown): bigint {
@@ -110,13 +119,13 @@ export async function loadStoreDashboard(opts: {
     );
   }
 
-  // ---- 2. Orders + inventory (parallel) -----------------------------
+  // ---- 2. Orders + inventory + families (parallel) ------------------
   // Wishlists are scoped to "those whose items reference this store's
   // inventory." Schema-wise wishlists don't carry a store_id, so we
   // discover the link through wishlist_item → inventory.store_id. The
   // single-store demo means every wishlist belongs to this store, but
   // we filter anyway so this keeps working when a second store is added.
-  const [inventoryResult, orderItemsResult] = await Promise.all([
+  const [inventoryResult, orderItemsResult, familiesResult] = await Promise.all([
     supabase
       .from("inventory")
       .select("id, name, category, price_stroops, stock, unit")
@@ -127,6 +136,11 @@ export async function loadStoreDashboard(opts: {
       .from("wishlist_item")
       .select("wishlist_id, inventory:inventory_id (store_id)")
       .order("wishlist_id"),
+    supabase
+      .from("profiles")
+      .select("id, display_name, country")
+      .eq("role", "family")
+      .order("display_name", { ascending: true }),
   ]);
 
   if (inventoryResult.error) {
@@ -137,6 +151,14 @@ export async function loadStoreDashboard(opts: {
       `wishlist_item join failed: ${orderItemsResult.error.message}`,
     );
   }
+  if (familiesResult.error) {
+    throw new Error(`families load failed: ${familiesResult.error.message}`);
+  }
+  const families: StoreFamilyOption[] = (familiesResult.data ?? []).map((row) => ({
+    id: row.id as string,
+    display_name: (row.display_name as string) ?? "Family",
+    country: (row.country as string | null) ?? null,
+  }));
 
   // Build the set of wishlist ids that touch this store, plus per-wishlist
   // item counts.
@@ -311,5 +333,6 @@ export async function loadStoreDashboard(opts: {
     receipts,
     inventory,
     activity: settlements.slice(0, 10),
+    families,
   };
 }

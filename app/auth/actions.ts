@@ -1,11 +1,37 @@
 "use server";
 
+import { Keypair } from "@stellar/stellar-sdk";
 import { redirect } from "next/navigation";
 
 import { dashboardForRole, type Role } from "@/app/auth/role-routes";
 import { loadUserProfile } from "@/lib/auth-role";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+
+/**
+ * For the demo, every OFW and Family signs through the server's shared
+ * STELLAR_DEMO_SECRET_KEY (see db/seed.sql comments + lib/stellar/contract.ts).
+ * The contract calls `require_auth()` on the from-address, so the profile's
+ * stellar_public_key MUST match the signer's pubkey or the on-chain tx
+ * surfaces as `contract_call_failed`.
+ *
+ * Resolving the pubkey from the secret at sign-up time keeps the seeded
+ * profiles and the freshly-registered ones aligned automatically — no manual
+ * step to remember after rotating the demo signer.
+ *
+ * Returns null when the secret isn't configured or is malformed; callers
+ * then leave stellar_public_key null and /api/deposit surfaces the clearer
+ * "ofw_address_not_set" error downstream.
+ */
+function demoSignerPublicKey(): string | null {
+  const secret = process.env.STELLAR_DEMO_SECRET_KEY;
+  if (!secret) return null;
+  try {
+    return Keypair.fromSecret(secret).publicKey();
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Sign-in server action. Called from the login form's <form action>.
@@ -147,11 +173,16 @@ export async function registerAction(
   // Service_role bypasses RLS and is the right hammer for "trusted
   // server-side post-signup setup."
   const admin = getSupabaseAdmin();
+  // OFW + Family share the demo signer's pubkey so the contract's
+  // require_auth() matches. Store doesn't sign anything — leave null.
+  const stellarPublicKey =
+    role === "ofw" || role === "family" ? demoSignerPublicKey() : null;
   const { error: profileErr } = await admin.from("profiles").upsert(
     {
       id: signUpData.user.id,
       role,
       display_name: displayName,
+      stellar_public_key: stellarPublicKey,
     },
     { onConflict: "id" },
   );

@@ -18,6 +18,7 @@ import { formatXlmWithUnit, truncateHash } from "@/lib/format-xlm";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { timeAgo } from "@/lib/time-ago";
 
+import { CreateOrderForm } from "./CreateOrderForm";
 import { InventoryItemCard } from "./InventoryItemCard";
 import { MarkDeliveredButton } from "./MarkDeliveredButton";
 import { OrdersRealtimeRefresher } from "./OrdersRealtimeRefresher";
@@ -126,6 +127,20 @@ export default async function StoreDashboardPage() {
           <EmptyState />
         ) : (
           <div className="space-y-10">
+            <CreateOrderForm
+              storeId={data.store.id}
+              families={data.families}
+              inventory={data.inventory.map((inv) => ({
+                id: inv.id,
+                name: inv.name,
+                category: inv.category,
+                // bigint → string for the client boundary
+                price_stroops: inv.price_stroops.toString(),
+                stock: inv.stock,
+                unit: inv.unit,
+              }))}
+            />
+
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
               <div className="lg:col-span-2">
                 <OrderQueue orders={data.orders} />

@@ -1,11 +1,6 @@
-import { redirect } from "next/navigation";
-
-import { dashboardForRole } from "@/app/auth/role-routes";
 import { BackToHomeButton } from "@/components/ui/BackToHomeButton";
 import { Card } from "@/components/ui/Card";
 import { SparkleIcon } from "@/components/ui/icons";
-import { loadUserProfile } from "@/lib/auth-role";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 import { RegisterForm } from "./RegisterForm";
 
@@ -14,20 +9,12 @@ export const dynamic = "force-dynamic";
 /**
  * Sign-up page. Server component — only the form is client.
  *
- * Already-signed-in users get bounced to their dashboard so we don't
- * sit them on a form they shouldn't fill out (and so the "back to home"
- * affordance there points somewhere useful instead).
+ * We deliberately do NOT auto-redirect signed-in users away. Clicking
+ * "Register an account" from the marketing page should always land on the
+ * form — useful for creating additional demo accounts (OFW + family + store)
+ * from a single browser session without having to sign out first.
  */
 export default async function RegisterPage() {
-  const supabase = createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (user) {
-    const { profile } = await loadUserProfile(user.id);
-    redirect(dashboardForRole(profile?.role));
-  }
-
   return (
     <main className="relative min-h-screen flex items-center justify-center px-4 py-16">
       <BackToHomeButton />

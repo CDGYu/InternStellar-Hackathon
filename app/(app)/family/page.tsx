@@ -19,6 +19,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { timeAgo } from "@/lib/time-ago";
 
 import { BalanceBreakdown } from "./BalanceBreakdown";
+import { BillsSection } from "./BillsSection";
 import { ConfirmDeliveryButton } from "./ConfirmDeliveryButton";
 import {
   WishlistBuilder,
@@ -154,6 +155,27 @@ export default async function FamilyDashboardPage() {
             initialStatus={data.activeDraft?.wishlist.status ?? null}
             initialItems={builderInitialItems}
             initialEscrowTxHash={data.activeDraft?.wishlist.escrow_tx_hash ?? null}
+          />
+        </div>
+
+        <div className="mb-10">
+          <BillsSection
+            familyId={data.family.id}
+            billers={data.billers.map((b) => ({
+              id: b.id,
+              name: b.name,
+              category: b.category,
+            }))}
+            bills={data.bills.map((b) => ({
+              id: b.id,
+              biller_name: b.biller.name,
+              biller_category: b.biller.category,
+              account_number: b.account_number,
+              // bigint → string for the client boundary
+              amount_stroops: b.amount_stroops.toString(),
+              due_date: b.due_date,
+              status: b.status,
+            }))}
           />
         </div>
 
