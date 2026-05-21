@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Plus_Jakarta_Sans, DM_Sans } from "next/font/google";
 
 import { getTheme } from "@/lib/theme";
@@ -26,6 +26,16 @@ const body = DM_Sans({
 export const metadata: Metadata = {
   title: "InternStellar — Chain Bridge",
   description: "Smart remittance escrow on Stellar / Soroban",
+};
+
+// Explicit responsive viewport. Next 14 ships `width=device-width` by default
+// but not `initial-scale` — without it, iOS Safari can land at the wrong zoom
+// on orientation change. `viewportFit: "cover"` lets `env(safe-area-inset-*)`
+// resolve correctly inside notched displays.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({

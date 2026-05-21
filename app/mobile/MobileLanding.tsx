@@ -3,7 +3,7 @@ import { Menu, ArrowRight } from "lucide-react";
 
 export function MobileLanding() {
   return (
-    <div className="flex flex-col h-full bg-[#f5f7fa] text-[#1a1d2e] font-sans">
+    <div className="min-h-screen flex flex-col bg-[#f5f7fa] text-[#1a1d2e] font-sans">
       <div className="px-5 py-4 flex items-center justify-between bg-white shadow-sm">
         <h1 className="text-lg font-extrabold tracking-tight">InternStellar</h1>
         <button className="w-9 h-9 flex items-center justify-center rounded-full bg-slate-50">
@@ -11,7 +11,7 @@ export function MobileLanding() {
         </button>
       </div>
 
-      <div className="flex-1 flex flex-col justify-center px-6 pb-12">
+      <div className="flex-1 flex flex-col justify-center px-6 pb-12 max-w-md mx-auto w-full">
         <h2 className="text-5xl font-extrabold leading-[0.95] tracking-tight mb-12">
           Bridge made<br />
           by users<br />

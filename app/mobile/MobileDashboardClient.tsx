@@ -58,7 +58,7 @@ export function MobileDashboardClient({ ofwData, familyData, currentUserRole, cu
   ];
 
   return (
-    <div className="flex flex-col h-full bg-[#f5f7fa] text-[#1a1d2e] overflow-hidden font-sans">
+    <div className="relative flex flex-col h-screen max-w-md mx-auto bg-[#f5f7fa] text-[#1a1d2e] overflow-hidden font-sans">
       
       {/* Top Header */}
       <div className="px-6 py-5 flex items-center justify-between bg-white shrink-0 shadow-sm z-10">
