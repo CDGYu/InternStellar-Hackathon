@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { ArrowUpRightIcon } from "@/components/ui/icons";
 import { signInAction, type SignInResult } from "@/app/auth/actions";
+import { DEMO_ACCOUNTS } from "@/app/auth/demo-accounts";
 
 /**
  * Client-only form. The page that wraps it is a server component — keeps
@@ -23,27 +24,6 @@ import { signInAction, type SignInResult } from "@/app/auth/actions";
  * code path as a regular submit, so the server action / error handling
  * stays identical.
  */
-const DEMO_ACCOUNTS = [
-  {
-    label: "Auntie Maria",
-    role: "OFW",
-    email: "maria.ofw@internstellar.demo",
-    password: "demo123456",
-  },
-  {
-    label: "Lola Cora",
-    role: "Family",
-    email: "cora.family@internstellar.demo",
-    password: "demo123456",
-  },
-  {
-    label: "Aling Nena",
-    role: "Store",
-    email: "nena.store@internstellar.demo",
-    password: "demo123456",
-  },
-] as const;
-
 export function LoginForm() {
   const [state, formAction] = useFormState<SignInResult | null, FormData>(
     signInAction,

@@ -8,6 +8,7 @@
     "start": "next start",
     "fund-test-account": "npx tsx scripts/fund-test-account.ts",
     "verify-stellar": "npx tsx scripts/verify-stellar-connection.ts",
+    "test:device": "npx tsx scripts/_test-device.ts",
     "test:stellar-lib": "npx tsx scripts/_test-stellar-lib.ts",
     "test:escrow-wiring": "npx tsx scripts/_test-escrow-wiring.ts",
     "test:no-leaks": "npx tsx scripts/_test-no-stacktrace-leak.ts",
