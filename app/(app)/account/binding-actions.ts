@@ -36,6 +36,7 @@ export async function bindFamilyAction(_p: BindActionResult | null, fd: FormData
   const r = await bindFamilyToOfw(caller.userId, email);
   if (!r.ok) return { ok: false, error: BIND_REASON_MESSAGE[r.reason] };
   revalidatePath("/ofw"); revalidatePath("/mobile/ofw");
+  revalidatePath("/settings/connections"); revalidatePath("/mobile/settings/connections");
   return { ok: true };
 }
 
@@ -47,6 +48,7 @@ export async function bindSponsorAction(_p: BindActionResult | null, fd: FormDat
   const r = await bindSponsorOfw(caller.userId, email);
   if (!r.ok) return { ok: false, error: BIND_REASON_MESSAGE[r.reason] };
   revalidatePath("/family"); revalidatePath("/mobile/family");
+  revalidatePath("/settings/connections"); revalidatePath("/mobile/settings/connections");
   return { ok: true };
 }
 
@@ -58,5 +60,6 @@ export async function bindStoreAction(_p: BindActionResult | null, fd: FormData)
   const r = await bindStore(caller.userId, email);
   if (!r.ok) return { ok: false, error: BIND_REASON_MESSAGE[r.reason] };
   revalidatePath("/family"); revalidatePath("/mobile/family");
+  revalidatePath("/settings/connections"); revalidatePath("/mobile/settings/connections");
   return { ok: true };
 }
