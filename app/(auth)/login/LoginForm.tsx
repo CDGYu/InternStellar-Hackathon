@@ -6,7 +6,7 @@ import { useFormState, useFormStatus } from "react-dom";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { ArrowUpRightIcon } from "@/components/ui/icons";
-import { signInAction, type SignInResult } from "@/app/auth/actions";
+import { signInAction, type SignInResult, resendConfirmationAction, type ResendResult } from "@/app/auth/actions";
 import { DEMO_ACCOUNTS } from "@/app/auth/demo-accounts";
 
 /**
@@ -30,6 +30,11 @@ export function LoginForm() {
     null,
   );
 
+  const [resendState, resendAction] = useFormState<ResendResult | null, FormData>(
+    resendConfirmationAction,
+    null,
+  );
+
   const emailRef = useRef<HTMLInputElement>(null);
   const passwordRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
@@ -38,6 +43,14 @@ export function LoginForm() {
     if (emailRef.current) emailRef.current.value = email;
     if (passwordRef.current) passwordRef.current.value = password;
     formRef.current?.requestSubmit();
+  }
+
+  function resend() {
+    const email = emailRef.current?.value?.trim();
+    if (!email) return;
+    const fd = new FormData();
+    fd.set("email", email);
+    resendAction(fd);
   }
 
   return (
@@ -71,6 +84,21 @@ export function LoginForm() {
       ) : null}
 
       <SubmitButton />
+
+      <button
+        type="button"
+        onClick={resend}
+        className="text-xs text-ink-muted hover:text-accent transition-colors text-center"
+      >
+        Didn&apos;t get the confirmation email? Resend
+      </button>
+      {resendState?.ok ? (
+        <p role="status" className="text-xs text-accent-teal text-center">
+          If that account needs confirming, an email is on its way.
+        </p>
+      ) : resendState?.error ? (
+        <p role="alert" className="text-xs text-red-500 text-center">{resendState.error}</p>
+      ) : null}
 
       <div className="mt-4">
         <div className="flex items-center gap-4 mb-4">
