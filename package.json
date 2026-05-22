@@ -15,7 +15,8 @@
     "test:no-leaks": "npx tsx scripts/_test-no-stacktrace-leak.ts",
     "reset": "npx tsx scripts/reset-demo.ts",
     "reset:db-only": "npx tsx scripts/reset-demo.ts --db-only",
-    "setup-billers": "npx tsx scripts/setup-billers.ts"
+    "setup-billers": "npx tsx scripts/setup-billers.ts",
+    "test:binding": "npx tsx --conditions react-server scripts/_test-binding.ts"
   },
   "dependencies": {
     "@stellar/stellar-sdk": "^15.1.0",
