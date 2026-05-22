@@ -46,6 +46,10 @@ export function err(
 
   const headers = new Headers();
   headers.set("X-Request-Id", requestId);
+  // Error responses must never be cached. A 503 contract_not_configured or
+  // a 409 in_flight body becoming sticky in a CDN would surface as a stale
+  // failure long after the underlying state has cleared.
+  headers.set("Cache-Control", "no-store");
   if (opts?.retryAfterSeconds !== undefined) {
     headers.set("Retry-After", String(opts.retryAfterSeconds));
   }

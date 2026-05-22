@@ -44,6 +44,11 @@ create table if not exists inventory (
   created_at    timestamptz not null default now()
 );
 
+-- Cover the foreign key. Joins through inventory.store_id (P3's catalogue
+-- list, P2's lock-route's per-wishlist store lookup) would otherwise do
+-- a sequential scan.
+create index if not exists inventory_store_id_idx on inventory (store_id);
+
 -- ============================================================
 -- wishlist — a family's pending order
 -- ============================================================
@@ -64,6 +69,10 @@ create table if not exists wishlist (
   updated_at      timestamptz not null default now()
 );
 
+-- Cover the family_id foreign key. "List my wishlists" is the family's
+-- primary query and the read_all_wishlist policy uses it directly.
+create index if not exists wishlist_family_id_idx on wishlist (family_id);
+
 -- ============================================================
 -- wishlist_item — line items on a wishlist
 -- ============================================================
@@ -74,6 +83,15 @@ create table if not exists wishlist_item (
   quantity             int  not null check (quantity > 0),
   price_stroops_at_add bigint not null check (price_stroops_at_add >= 0)
 );
+
+-- Cover the wishlist_id foreign key. P3's "show this wishlist's items"
+-- query and the lock route's per-wishlist item load both filter on it.
+create index if not exists wishlist_item_wishlist_id_idx
+  on wishlist_item (wishlist_id);
+-- Cover the inventory_id foreign key. The lock route resolves store_id
+-- by joining items.inventory_id -> inventory.id.
+create index if not exists wishlist_item_inventory_id_idx
+  on wishlist_item (inventory_id);
 
 -- ============================================================
 -- settlement — audit trail of on-chain contract events
@@ -87,6 +105,10 @@ create table if not exists settlement (
   created_at     timestamptz not null default now()
 );
 
+-- Cover the wishlist_id foreign key. The audit trail page joins
+-- settlement.wishlist_id -> wishlist for the per-order timeline view.
+create index if not exists settlement_wishlist_id_idx on settlement (wishlist_id);
+
 -- ============================================================
 -- request_lock — cross-replica idempotency dedup
 -- Used by lib/api/idempotency.ts to dedupe concurrent identical requests
@@ -97,6 +119,18 @@ create table if not exists request_lock (
   key        text primary key,
   expires_at timestamptz not null
 );
+
+-- The only callers are the try_idempotency_lock / release_idempotency_lock
+-- SECURITY DEFINER RPCs (which bypass RLS as the function owner). No
+-- caller should reach this table via PostgREST directly. We enable RLS
+-- with a single deny-all policy so the Supabase advisor's
+-- `rls_enabled_no_policy` lint goes away AND the intent is explicit.
+alter table request_lock enable row level security;
+drop policy if exists request_lock_no_direct_access on request_lock;
+create policy request_lock_no_direct_access on request_lock
+  for all
+  using      (false)
+  with check (false);
 
 -- ============================================================
 -- Realtime is configured in db/realtime.sql (Day 2 task) — kept in a

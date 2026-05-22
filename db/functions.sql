@@ -40,14 +40,18 @@ begin
 end;
 $$;
 
--- Make the RPC callable from server-side (service_role) AND from any
--- authenticated user. Anon role is intentionally excluded.
-revoke all on function public.finalize_wishlist(uuid) from public;
+-- Service-role ONLY. Authenticated callers used to be allowed (defense in
+-- depth in case P3 bypassed P2's route for a button) but that opened a
+-- /rest/v1/rpc/finalize_wishlist surface where any signed-in user could
+-- decrement any wishlist's inventory. The only intended caller is
+-- /api/escrow/release running under service_role; revoke from authenticated
+-- so the Supabase Security Advisor stops flagging it.
+revoke all     on function public.finalize_wishlist(uuid) from public;
+revoke execute on function public.finalize_wishlist(uuid) from authenticated;
 grant  execute on function public.finalize_wishlist(uuid) to service_role;
-grant  execute on function public.finalize_wishlist(uuid) to authenticated;
 
 comment on function public.finalize_wishlist(uuid) is
-  'Day 4: decrement inventory.stock for each wishlist_item on the given wishlist. Idempotency is enforced by the caller (release route checks wishlist.release_tx_hash before invoking). Stock is clamped at 0.';
+  'Day 4: decrement inventory.stock for each wishlist_item on the given wishlist. Service-role only — called from /api/escrow/release after a successful on-chain release. Idempotency is enforced by the caller (route checks wishlist.release_tx_hash before invoking). Stock is clamped at 0.';
 
 -- ============================================================
 -- try_idempotency_lock(p_key text, p_ttl_seconds int) -> boolean
