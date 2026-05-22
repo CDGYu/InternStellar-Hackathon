@@ -35,7 +35,17 @@
       "PowerShell(git pull --rebase origin main)",
       "PowerShell(git stash push -m \"wip-settings\" -- .claude/settings.local.json)",
       "PowerShell(git stash pop)",
-      "PowerShell(git push origin main; Write-Output \"---- exit $LASTEXITCODE ----\"; git --no-pager log --oneline -3)"
+      "PowerShell(git push origin main; Write-Output \"---- exit $LASTEXITCODE ----\"; git --no-pager log --oneline -3)",
+      "PowerShell(git checkout --ours -- lib/stellar/network.ts)",
+      "PowerShell(git add lib/stellar/network.ts)",
+      "PowerShell(npx tsc --noEmit -p tsconfig.json 2>&1 | Select-Object -First 40; Write-Output \"---- tsc exit $LASTEXITCODE ----\")",
+      "PowerShell(npm run test:stellar-lib 2>&1 | Select-Object -Last 25; Write-Output \"---- exit $LASTEXITCODE ----\")",
+      "PowerShell(git commit -F .git/MERGE_MSG_TMP 2>&1; Write-Output \"---- exit $LASTEXITCODE ----\"; if \\(Test-Path .git/MERGE_MSG_TMP\\) { Remove-Item .git/MERGE_MSG_TMP -Force }; git --no-pager log --oneline -3)",
+      "PowerShell(git push origin feat/mainnet-deploy 2>&1; Write-Output \"---- exit $LASTEXITCODE ----\")",
+      "PowerShell(git checkout -- .claude/settings.local.json 2>$null; git switch main 2>&1 | Out-Null; Write-Output \\(\"on branch: \" + \\(git branch --show-current\\)\\); git stash list | Select-Object -First 1)",
+      "PowerShell(git stash pop 2>&1; Write-Output \"---- exit $LASTEXITCODE ----\"; git status --short)",
+      "PowerShell(git checkout -- .claude/settings.local.json; git stash pop 2>&1; Write-Output \"---- exit $LASTEXITCODE ----\"; git stash list | Select-Object -First 1; git status --short)",
+      "PowerShell(Start-Sleep -Seconds 4; try { $pr = Invoke-RestMethod -Uri \"https://api.github.com/repos/CDGYu/InternStellar-Hackathon/pulls/8\" -Headers @{ \"User-Agent\" = \"claude-code\"; \"Accept\" = \"application/vnd.github+json\" } -ErrorAction Stop; Write-Output \\(\"mergeable: {0}\" -f $pr.mergeable\\); Write-Output \\(\"mergeable_state: {0}\" -f $pr.mergeable_state\\); Write-Output \\(\"head sha: {0}\" -f $pr.head.sha\\); Write-Output \\(\"commits: {0}  changed_files: {1}\" -f $pr.commits, $pr.changed_files\\) } catch { Write-Output \\(\"ERR: \" + $_.Exception.Message\\) })"
     ],
     "additionalDirectories": [
       "C:\\Users\\user\\Downloads\\InternStellar-Hackathon\\.git"
