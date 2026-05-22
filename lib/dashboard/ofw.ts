@@ -154,16 +154,35 @@ export async function loadOfwDashboard(opts: {
   // inventory; bills + wishlists short-circuit to empty so Postgres never
   // sees an empty-string UUID.
   const profileIds = opts.familyId ? [opts.ofwId, opts.familyId] : [opts.ofwId];
-  const [profilesResult, inventoryResult, billsResult] = await Promise.all([
-    supabase
-      .from("profiles")
-      .select("id, role, display_name, country, stellar_public_key")
-      .in("id", profileIds),
-    supabase
-      .from("inventory")
-      .select("id, store_id, name, category, price_stroops, stock, unit")
-      .order("category", { ascending: true })
-      .order("name", { ascending: true }),
+
+  // Fetch profiles first so we can read the family's store_id and scope inventory.
+  const { data: profiles, error: pErr } = await supabase
+    .from("profiles")
+    .select("id, role, display_name, country, stellar_public_key, store_id")
+    .in("id", profileIds);
+  if (pErr) throw new Error(`profiles load failed: ${pErr.message}`);
+
+  const ofwRow = profiles?.find((p) => p.id === opts.ofwId);
+  if (!ofwRow) {
+    throw new Error(
+      `OFW profile not found: ${opts.ofwId}. Did you run db/seed.sql?`,
+    );
+  }
+  const familyRow = opts.familyId
+    ? profiles?.find((p) => p.id === opts.familyId) ?? null
+    : null;
+
+  // Scope inventory to the family's store when a store binding exists.
+  const familyStoreId = (familyRow as any)?.store_id as string | null | undefined;
+  let inventoryQuery = supabase
+    .from("inventory")
+    .select("id, store_id, name, category, price_stroops, stock, unit")
+    .order("category", { ascending: true })
+    .order("name", { ascending: true });
+  if (familyStoreId) inventoryQuery = inventoryQuery.eq("store_id", familyStoreId);
+
+  const [inventoryResult, billsResult] = await Promise.all([
+    inventoryQuery,
     opts.familyId
       ? supabase
           .from("bill")
@@ -175,7 +194,6 @@ export async function loadOfwDashboard(opts: {
       : Promise.resolve({ data: [], error: null } as const),
   ]);
 
-  const { data: profiles, error: pErr } = profilesResult;
   if (inventoryResult.error) {
     throw new Error(`inventory load failed: ${inventoryResult.error.message}`);
   }
@@ -191,18 +209,6 @@ export async function loadOfwDashboard(opts: {
     }
     throw new Error(`bills load failed: ${m}`);
   }
-
-  if (pErr) throw new Error(`profiles load failed: ${pErr.message}`);
-
-  const ofwRow = profiles?.find((p) => p.id === opts.ofwId);
-  if (!ofwRow) {
-    throw new Error(
-      `OFW profile not found: ${opts.ofwId}. Did you run db/seed.sql?`,
-    );
-  }
-  const familyRow = opts.familyId
-    ? profiles?.find((p) => p.id === opts.familyId) ?? null
-    : null;
 
   // ---- 2. Wishlists for this family ----------------------------------
   const wishlistResult = opts.familyId
