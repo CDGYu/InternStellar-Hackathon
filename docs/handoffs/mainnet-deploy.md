@@ -31,8 +31,8 @@ Mainnet smoke result:
 |------|--------|
 | Deploy | `CCSK35NQQR46C7ULBEGL6FG7JJ7XPLR427ZN5HHN2FLBXTZNKT57GKRW` |
 | `deposit_and_split` | tx `b014a121980f7aac4b1eb6896c81e18ce490d24acbc305299b4bd2e78d36ece9`, event `deposit`, shares `(6000, 3000, 1000)` |
-| `lock_escrow` | tx `5cae5eaa93e6321fc4d2b8929d1394a14ac27f0828c95351697b688ba8d12b507`, event `esc_lock`, escrow id `1` |
-| `release_escrow` | tx `4558fc00e4034fcdc5fe4ace4112d7bae0f6285e88c9b3c9a7874ccc9f8653a60`, event `esc_rel` |
+| `lock_escrow` | tx `5cae5eaa93e6321fc4d2b8929d1394a14ac27f0828c95351697b68ba8d12b507`, event `esc_lock`, escrow id `1` |
+| `release_escrow` | tx `4558fc00e4034fcdc5fe4ace4112d7bae0f6285e88c9b3c9a7874cc9f8653a60`, event `esc_rel` |
 | `get_balances(store)` | `["0","2000","0"]` |
 
 ---
