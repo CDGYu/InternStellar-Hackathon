@@ -25,7 +25,20 @@
       "Bash(curl -s -A \"Mozilla/5.0 \\(iPhone\\) Mobile\" -o /dev/null -w \"mobile-confirmed=%{http_code}\\\\n\" http://localhost:3000/mobile/auth/confirmed)",
       "Bash(curl -s -A \"Mozilla/5.0 \\(Windows NT 10.0\\) Chrome/120\" -o /dev/null -w \"web-settings=%{http_code}\\\\n\" http://localhost:3000/settings)",
       "WebFetch(domain:horizon-testnet.stellar.org)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(Select-Object -First 40)",
+      "PowerShell(npx tsc --noEmit -p tsconfig.json 2>&1)",
+      "PowerShell(git add \"app/\\(app\\)/ofw/OfwWishlistRow.tsx\" \"app/mobile/components/MobileWishlists.tsx\")",
+      "PowerShell(git push origin main)",
+      "PowerShell(git fetch origin)",
+      "PowerShell(git rev-list --left-right --count origin/main...main)",
+      "PowerShell(git pull --rebase origin main)",
+      "PowerShell(git stash push -m \"wip-settings\" -- .claude/settings.local.json)",
+      "PowerShell(git stash pop)",
+      "PowerShell(git push origin main; Write-Output \"---- exit $LASTEXITCODE ----\"; git --no-pager log --oneline -3)"
+    ],
+    "additionalDirectories": [
+      "C:\\Users\\user\\Downloads\\InternStellar-Hackathon\\.git"
     ]
   }
 }
