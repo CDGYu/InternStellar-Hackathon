@@ -18,6 +18,9 @@ import { formatXlm, formatXlmWithUnit } from "@/lib/format-xlm";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
+import { bindFamilyAction } from "@/app/(app)/account/binding-actions";
+import { BindingBanner } from "@/app/(app)/account/BindingBanner";
+
 import { BillsPanel } from "./BillsPanel";
 import { OfwWishlistRow } from "./OfwWishlistRow";
 import { SendFundsForm } from "./SendFundsForm";
@@ -69,6 +72,16 @@ export default async function OfwDashboardPage() {
       />
 
       <main className="mx-auto max-w-7xl px-4 md:px-8 pb-24 pt-10">
+        {familyId == null && (
+          <BindingBanner
+            action={bindFamilyAction}
+            title="Connect the family you support"
+            body="Enter your family's account email to link them. You'll then see their wishlists and bills here."
+            label="Family email"
+            placeholder="cora.family@example.com"
+          />
+        )}
+
         <HeroStrip ofwName={data.ofw.display_name} family={data.family} />
 
         <SummaryStats totals={data.totals} releasedCount={data.releasedCount} />
