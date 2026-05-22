@@ -57,7 +57,7 @@ Email confirmation links use Supabase's **Site URL** as the prefix
 (see `app/auth/confirm/route.ts`). For each deploy environment:
 
 - Local dev: Site URL = `http://localhost:3000`
-- Production: Site URL = the Vercel production domain (e.g. `https://internstellar-eight.vercel.app`)
+- Production: Site URL = the Vercel production domain (currently `https://internstellar-beta.vercel.app`; the older `internstellar-eight` alias is retired)
 
 Set this in Supabase Studio → Authentication → URL Configuration. Also
 add both `https://<production>/**` and `http://localhost:3000/**` to the
