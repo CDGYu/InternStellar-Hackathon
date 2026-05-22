@@ -52,17 +52,17 @@ These cannot be configured via SQL or the MCP — flip them once per project:
 ### Testnet
 - Contract / App Address: `CB3VGM6SU3RRJLRJMT7CRX36ARKCH222ZKGKVPMS2DU5MIAHKUFZGRDF`
 - 📸 Screenshot — Stellar Expert (Testnet)
-  ![Testnet Screenshot](./screenshots/testnet.png)
+  ![Testnet Screenshot](./screenshots/testnet.jpg)
 
 ### Mainnet
-- Contract / App Address: `Not deployed — testnet-only for Build on Stellar PH 2026.`
+- Contract / App Address: `CCSK35NQQR46C7ULBEGL6FG7JJ7XPLR427ZN5HHN2FLBXTZNKT57GKRW`
 - 📸 Screenshot — Stellar Expert (Mainnet)
-  ![Mainnet Screenshot](./screenshots/mainnet.png)
+  ![Mainnet Screenshot](./screenshots/mainnet.jpg)
 
 ## 🎥 Demo
 - 🔗 Live App: https://internstellar-hackathon.vercel.app/
 - 🎬 Demo Video: [YouTube / Loom link]
-- 🖼 Pitch Deck: [Google Slides / Canva link]
+- 🖼 Pitch Deck: [View on Canva](https://www.canva.com/design/DAHKW-3NQtg/KsqcUO-JNgxxfDmhMFCjzQ/edit?utm_content=DAHKW-3NQtg&utm_campaign=designshare&utm_medium=link2&utm_source=sharebutton)
 
 > **Live App credentials (testnet demo data):**
 > - OFW — `maria.ofw@internstellar.demo`
