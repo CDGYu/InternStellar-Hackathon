@@ -23,6 +23,8 @@ export interface FamilyProfile {
   id: string;
   display_name: string;
   country: string | null;
+  sponsor_ofw_id: string | null;
+  store_id: string | null;
 }
 
 export interface FamilyWishlistRow {
@@ -103,6 +105,10 @@ export interface ActiveDraft {
 
 export interface FamilyDashboardData {
   family: FamilyProfile;
+  /** Convenience re-exports of the family's link columns so page components
+   *  can render binding banners without reaching into `family`. */
+  sponsor_ofw_id: string | null;
+  store_id: string | null;
   totals: {
     /** Sum of `lock` minus `release` events — currently locked on the family's behalf. */
     inEscrow: bigint;
@@ -136,40 +142,44 @@ export async function loadFamilyDashboard(opts: {
 }): Promise<FamilyDashboardData> {
   const supabase = getSupabaseAdmin();
 
-  // ---- 1. Family profile + wishlists + inventory + billers + bills (parallel) ---------
-  const [profileResult, wishlistResult, inventoryResult, billersResult, billsResult] =
-    await Promise.all([
-      supabase
-        .from("profiles")
-        .select("id, display_name, country")
-        .eq("id", opts.familyId)
-        .maybeSingle(),
-      supabase
-        .from("wishlist")
-        .select(
-          "id, status, total_stroops, notes, escrow_tx_hash, release_tx_hash, created_at, updated_at",
-        )
-        .eq("family_id", opts.familyId)
-        .order("updated_at", { ascending: false }),
-      supabase
-        .from("inventory")
-        .select("id, store_id, name, category, price_stroops, stock, unit")
-        .order("category", { ascending: true })
-        .order("name", { ascending: true }),
-      supabase
-        .from("biller")
-        .select("id, name, category, stellar_address")
-        .order("name", { ascending: true }),
-      supabase
-        .from("bill")
-        .select(
-          "id, account_number, amount_stroops, due_date, status, autopay_enabled, biller:biller_id (id, name, category, stellar_address)",
-        )
-        .eq("family_id", opts.familyId)
-        .order("due_date", { ascending: true }),
-    ]);
+  // ---- 1. Family profile — fetched first so we can scope inventory to store_id --------
+  const { data: familyRow, error: profErr } = await supabase
+    .from("profiles")
+    .select("id, display_name, country, sponsor_ofw_id, store_id")
+    .eq("id", opts.familyId)
+    .maybeSingle();
+  if (profErr) throw new Error(`family profile load failed: ${profErr.message}`);
 
-  if (profileResult.error) throw new Error(`family profile load failed: ${profileResult.error.message}`);
+  // ---- 2. Scope inventory to family's store when bound; then fetch remaining queries in parallel ----
+  let inventoryQuery = supabase
+    .from("inventory")
+    .select("id, store_id, name, category, price_stroops, stock, unit")
+    .order("category", { ascending: true })
+    .order("name", { ascending: true });
+  if (familyRow?.store_id) inventoryQuery = inventoryQuery.eq("store_id", familyRow.store_id);
+
+  const [wishlistResult, inventoryResult, billersResult, billsResult] = await Promise.all([
+    supabase
+      .from("wishlist")
+      .select(
+        "id, status, total_stroops, notes, escrow_tx_hash, release_tx_hash, created_at, updated_at",
+      )
+      .eq("family_id", opts.familyId)
+      .order("updated_at", { ascending: false }),
+    inventoryQuery,
+    supabase
+      .from("biller")
+      .select("id, name, category, stellar_address")
+      .order("name", { ascending: true }),
+    supabase
+      .from("bill")
+      .select(
+        "id, account_number, amount_stroops, due_date, status, autopay_enabled, biller:biller_id (id, name, category, stellar_address)",
+      )
+      .eq("family_id", opts.familyId)
+      .order("due_date", { ascending: true }),
+  ]);
+
   if (wishlistResult.error) throw new Error(`wishlist load failed: ${wishlistResult.error.message}`);
   if (inventoryResult.error) throw new Error(`inventory load failed: ${inventoryResult.error.message}`);
   // Bills tables are additive — surface a clear setup hint if they're not
@@ -214,7 +224,7 @@ export async function loadFamilyDashboard(opts: {
     });
   }
 
-  const family = profileResult.data;
+  const family = familyRow;
   if (!family) {
     throw new Error(
       `Family profile not found: ${opts.familyId}. Did you run db/seed.sql?`,
@@ -224,7 +234,7 @@ export async function loadFamilyDashboard(opts: {
   const wishlistRows = wishlistResult.data ?? [];
   const wishlistIds = wishlistRows.map((w) => w.id as string);
 
-  // ---- 2. Item counts + settlements + draft items (parallel) --------
+  // ---- 3. Item counts + settlements + draft items (parallel) --------
   let itemCounts = new Map<string, number>();
   let settlements: FamilySettlementRow[] = [];
 
@@ -283,7 +293,7 @@ export async function loadFamilyDashboard(opts: {
     });
   }
 
-  // ---- 3. Active draft's line items (joined with inventory) ---------
+  // ---- 4. Active draft's line items (joined with inventory) ---------
   let activeDraft: ActiveDraft | null = null;
   if (draftRow) {
     const { data: lineItemRows, error: liErr } = await supabase
@@ -346,7 +356,7 @@ export async function loadFamilyDashboard(opts: {
     }))
     .filter((w) => w.status !== "cancelled");
 
-  // ---- 4. Totals -----------------------------------------------------
+  // ---- 5. Totals -----------------------------------------------------
   let locked = 0n;
   let released = 0n;
   for (const s of settlements) {
@@ -371,7 +381,11 @@ export async function loadFamilyDashboard(opts: {
       id: family.id as string,
       display_name: (family.display_name as string) ?? "Family",
       country: (family.country as string | null) ?? null,
+      sponsor_ofw_id: (family.sponsor_ofw_id as string | null) ?? null,
+      store_id: (family.store_id as string | null) ?? null,
     },
+    sponsor_ofw_id: (family.sponsor_ofw_id as string | null) ?? null,
+    store_id: (family.store_id as string | null) ?? null,
     totals: {
       inEscrow,
       receivedValue: released,

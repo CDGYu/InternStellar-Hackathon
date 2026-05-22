@@ -47,6 +47,8 @@ export default async function MobileFamilyPage() {
       familyData={familyData}
       currentUserRole="family"
       currentUserId={user.id}
+      needsSponsorLink={familyData.sponsor_ofw_id === null}
+      needsStoreLink={familyData.store_id === null}
     />
   );
 }

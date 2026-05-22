@@ -10,6 +10,7 @@ import {
   BugIcon,
   ChevronRightIcon,
   DocumentIcon,
+  GearIcon,
   HelpIcon,
   LockIcon,
   MailIcon,
@@ -86,6 +87,12 @@ export default async function SettingsPage() {
             label="Account Manager"
             hint="Your profile, role, and sign-out"
             href="/settings/account"
+          />
+          <SettingsLinkRow
+            icon={<GearIcon className="h-5 w-5" />}
+            label="Connections"
+            hint="Link your OFW sponsor, family, or store"
+            href="/settings/connections"
           />
 
           <DarkModeRow theme={theme} />

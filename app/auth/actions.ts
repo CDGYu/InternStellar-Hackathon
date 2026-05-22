@@ -322,3 +322,40 @@ export async function registerAction(
   }
   redirect("/login?registered=1");
 }
+
+/* -------------------------------------------------------------------- */
+/* Resend confirmation                                                   */
+/* -------------------------------------------------------------------- */
+
+export interface ResendResult {
+  ok: boolean;
+  error?: string;
+}
+
+/**
+ * Resend the signup confirmation email. Used from the login page when a
+ * user's earlier link was dead (e.g. Site URL was localhost). Supabase
+ * silently succeeds for unknown/already-confirmed emails (enumeration
+ * protection), so the caller shows generic success copy.
+ */
+export async function resendConfirmationAction(
+  _prev: ResendResult | null,
+  formData: FormData,
+): Promise<ResendResult> {
+  const email = (formData.get("email") as string | null)?.trim();
+  if (!email) return { ok: false, error: "Enter your email first." };
+
+  const { client: supabase, error: cfgErr } = safeServerClient();
+  if (cfgErr || !supabase) {
+    return { ok: false, error: "Deployment not configured — visit /status." };
+  }
+
+  const origin = await requestOrigin();
+  const { error } = await supabase.auth.resend({
+    type: "signup",
+    email,
+    ...(origin ? { options: { emailRedirectTo: `${origin}/auth/confirm` } } : {}),
+  });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}

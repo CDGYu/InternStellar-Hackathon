@@ -19,6 +19,9 @@ import { STELLAR_EXPLORER_BASE } from "@/lib/stellar/explorer";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { timeAgo } from "@/lib/time-ago";
 
+import { bindSponsorAction, bindStoreAction } from "@/app/(app)/account/binding-actions";
+import { BindingBanner } from "@/app/(app)/account/BindingBanner";
+
 import { BalanceBreakdown } from "./BalanceBreakdown";
 import { BillsSection } from "./BillsSection";
 import { ConfirmDeliveryButton } from "./ConfirmDeliveryButton";
@@ -79,6 +82,25 @@ export default async function FamilyDashboardPage() {
       />
 
       <main className="mx-auto max-w-7xl px-4 md:px-8 pb-24 pt-10">
+        {data.sponsor_ofw_id == null && (
+          <BindingBanner
+            action={bindSponsorAction}
+            title="Link your sponsoring OFW"
+            body="Enter your OFW's account email so their remittances can fund your wishlists and bills."
+            label="OFW email"
+            placeholder="maria.ofw@example.com"
+          />
+        )}
+        {data.store_id == null && (
+          <BindingBanner
+            action={bindStoreAction}
+            title="Link your local store"
+            body="Enter the store's account email to see their inventory and build wishlists from real stock."
+            label="Store email"
+            placeholder="nena.store@example.com"
+          />
+        )}
+
         <section className="mb-12">
           <p className="text-sm uppercase tracking-[0.22em] text-ink-muted font-medium">
             Welcome back

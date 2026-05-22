@@ -5,7 +5,7 @@ import { useFormState, useFormStatus } from "react-dom";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 
-import { signInAction, type SignInResult } from "@/app/auth/actions";
+import { signInAction, type SignInResult, resendConfirmationAction, type ResendResult } from "@/app/auth/actions";
 import { DEMO_ACCOUNTS } from "@/app/auth/demo-accounts";
 
 /**
@@ -24,6 +24,11 @@ export function MobileLoginForm() {
     null,
   );
 
+  const [resendState, resendAction] = useFormState<ResendResult | null, FormData>(
+    resendConfirmationAction,
+    null,
+  );
+
   const emailRef = useRef<HTMLInputElement>(null);
   const passwordRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
@@ -32,6 +37,14 @@ export function MobileLoginForm() {
     if (emailRef.current) emailRef.current.value = email;
     if (passwordRef.current) passwordRef.current.value = password;
     formRef.current?.requestSubmit();
+  }
+
+  function resend() {
+    const email = emailRef.current?.value?.trim();
+    if (!email) return;
+    const fd = new FormData();
+    fd.set("email", email);
+    resendAction(fd);
   }
 
   return (
@@ -84,6 +97,21 @@ export function MobileLoginForm() {
       ) : null}
 
       <SubmitButton />
+
+      <button
+        type="button"
+        onClick={resend}
+        className="w-full text-xs text-[#5b7cff] text-center"
+      >
+        Didn&apos;t get the confirmation email? Resend
+      </button>
+      {resendState?.ok ? (
+        <p role="status" className="text-xs text-emerald-600 text-center">
+          If that account needs confirming, an email is on its way.
+        </p>
+      ) : resendState?.error ? (
+        <p role="alert" className="text-xs text-red-600 text-center">{resendState.error}</p>
+      ) : null}
 
       <div className="pt-6 border-t border-black/5">
         <p className="text-center text-[11px] uppercase tracking-widest text-[#6b7280] font-bold mb-4">

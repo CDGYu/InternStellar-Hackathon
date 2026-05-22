@@ -47,6 +47,7 @@ export default async function MobileOfwPage() {
       familyData={familyData}
       currentUserRole="ofw"
       currentUserId={user.id}
+      needsFamilyLink={familyId === null}
     />
   );
 }

@@ -24,13 +24,25 @@ import { MobileBills } from "./components/MobileBills";
 import { MobileWishlists } from "./components/MobileWishlists";
 import { MobileActivity } from "./components/MobileActivity";
 import { MobileShop } from "./components/MobileShop";
+import { MobileBindingBanner } from "./components/MobileBindingBanner";
 import { formatXlmWithUnit, formatXlm } from "@/lib/format-xlm";
+import {
+  bindFamilyAction,
+  bindSponsorAction,
+  bindStoreAction,
+} from "@/app/(app)/account/binding-actions";
 
 type MobileDashboardClientProps = {
   ofwData: any;
   familyData: any;
   currentUserRole: "ofw" | "family";
   currentUserId: string;
+  /** OFW: true when no family has been linked yet. */
+  needsFamilyLink?: boolean;
+  /** Family: true when no sponsoring OFW has been linked yet. */
+  needsSponsorLink?: boolean;
+  /** Family: true when no store has been linked yet. */
+  needsStoreLink?: boolean;
 };
 
 const chartData = [
@@ -41,7 +53,7 @@ const chartData = [
   { week: "W5", amount: 1425 },
 ];
 
-export function MobileDashboardClient({ ofwData, familyData, currentUserRole, currentUserId }: MobileDashboardClientProps) {
+export function MobileDashboardClient({ ofwData, familyData, currentUserRole, currentUserId, needsFamilyLink, needsSponsorLink, needsStoreLink }: MobileDashboardClientProps) {
   const [activeTab, setActiveTab] = useState<
     "home" | "send" | "shop" | "bills" | "orders" | "activity"
   >("home");
@@ -84,6 +96,36 @@ export function MobileDashboardClient({ ofwData, familyData, currentUserRole, cu
         
         {activeTab === "home" && (
           <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+
+            {/* Binding banners — shown when account links are missing */}
+            {currentUserRole === "ofw" && needsFamilyLink && (
+              <MobileBindingBanner
+                action={bindFamilyAction}
+                title="Connect the family you support"
+                body="Enter your family's account email to link them. You'll then see their wishlists and bills here."
+                label="Family email"
+                placeholder="cora.family@example.com"
+              />
+            )}
+            {currentUserRole === "family" && needsSponsorLink && (
+              <MobileBindingBanner
+                action={bindSponsorAction}
+                title="Connect your sponsoring OFW"
+                body="Enter your OFW's account email so they can fund your wishlists and bills."
+                label="OFW email"
+                placeholder="maria.ofw@example.com"
+              />
+            )}
+            {currentUserRole === "family" && needsStoreLink && (
+              <MobileBindingBanner
+                action={bindStoreAction}
+                title="Connect your store"
+                body="Enter the store's account email to see their inventory and build wishlists from real products."
+                label="Store email"
+                placeholder="nena.store@example.com"
+              />
+            )}
+
             {/* Welcome */}
             <div>
               <p className="text-[11px] text-[#6b7280] uppercase tracking-widest mb-1.5 font-bold">WELCOME BACK</p>
