@@ -1,6 +1,6 @@
 -- db/migrations/2026-05-21-escrow-id-and-sponsor.sql
 --
--- Two related changes from the post-Day-6 audit (NEEDED-UPDATES-FOR-THE-REPO.md):
+-- Two related changes from the post-Day-6 audit (docs/system-updates/NEEDED-UPDATES-FOR-THE-REPO.md):
 --
 --   §3.3  wishlist.escrow_id (bigint, nullable)
 --         The on-chain u32 escrow id was previously stashed in `wishlist.notes`
