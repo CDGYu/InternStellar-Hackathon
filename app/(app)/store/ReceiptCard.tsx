@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/icons";
 import type { StoreReceipt } from "@/lib/dashboard/store";
 import { formatXlm, formatXlmWithUnit, truncateHash } from "@/lib/format-xlm";
+import { STELLAR_EXPLORER_BASE } from "@/lib/stellar/explorer";
 import { timeAgo } from "@/lib/time-ago";
 
 /**
@@ -131,7 +132,7 @@ function ChainRef({
   }
   return (
     <a
-      href={`https://stellar.expert/explorer/testnet/tx/${txHash}`}
+      href={`${STELLAR_EXPLORER_BASE}/tx/${txHash}`}
       target="_blank"
       rel="noreferrer"
       className="group p-3 rounded-xl bg-surface shadow-neu-inset-sm hover:shadow-neu-sm transition-shadow"

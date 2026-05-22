@@ -2,6 +2,7 @@ import { Card } from "@/components/ui/Card";
 import { EventPill, type SettlementEvent } from "@/components/ui/StatusPill";
 import { ArrowUpRightIcon } from "@/components/ui/icons";
 import { formatXlm, truncateHash } from "@/lib/format-xlm";
+import { STELLAR_EXPLORER_BASE } from "@/lib/stellar/explorer";
 
 /**
  * Statement-style view of every on-chain event tied to the OFW's
@@ -40,6 +41,7 @@ export function TransactionHistory({
   rows: TxHistoryRow[];
   ofwStellarAddress: string | null;
 }) {
+  const contractId = process.env.NEXT_PUBLIC_CONTRACT_ID;
   return (
     <Card className="p-8 md:p-10">
       <div className="flex items-end justify-between gap-6 mb-6">
@@ -57,9 +59,9 @@ export function TransactionHistory({
       </div>
 
       {/* Footnote: deposits are on-chain only — point to Stellar Expert. */}
-      {ofwStellarAddress ? (
+      {contractId ? (
         <a
-          href={`https://stellar.expert/explorer/testnet/account/${ofwStellarAddress}`}
+          href={`${STELLAR_EXPLORER_BASE}/contract/${contractId}`}
           target="_blank"
           rel="noreferrer"
           className="group block mb-8 p-4 rounded-2xl bg-surface shadow-neu-inset-sm hover:shadow-neu-sm transition-shadow"
@@ -68,10 +70,10 @@ export function TransactionHistory({
             Deposit history is on-chain
           </p>
           <p className="mt-1.5 text-sm text-ink">
-            Your full Stellar testnet account, including the deposit half of
-            every transaction below.{" "}
+            The escrow contract&apos;s full on-chain activity, including the
+            deposit half of every transaction below.{" "}
             <span className="text-accent group-hover:text-accent-light transition-colors inline-flex items-center gap-1 font-medium">
-              View on Stellar Expert
+              View contract on Stellar Expert
               <ArrowUpRightIcon className="h-3 w-3" />
             </span>
           </p>
@@ -82,8 +84,8 @@ export function TransactionHistory({
             Deposit history is on-chain
           </p>
           <p className="mt-1.5 text-sm text-ink-muted">
-            Set a Stellar public key on your profile to link the deposit
-            half of this audit trail.
+            Contract id not configured — set NEXT_PUBLIC_CONTRACT_ID to link
+            the on-chain audit trail.
           </p>
         </div>
       )}
@@ -109,7 +111,7 @@ export function TransactionHistory({
                   ) : null}
                   <p className="text-xs text-ink-muted font-mono mt-1.5 truncate">
                     <a
-                      href={`https://stellar.expert/explorer/testnet/tx/${row.tx_hash}`}
+                      href={`${STELLAR_EXPLORER_BASE}/tx/${row.tx_hash}`}
                       target="_blank"
                       rel="noreferrer"
                       className="text-accent hover:text-accent-light transition-colors"

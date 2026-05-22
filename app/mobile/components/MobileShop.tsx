@@ -7,6 +7,7 @@ import { ArrowRight, ArrowUpRight, Lock, Minus, Plus } from "lucide-react";
 import { apiPost } from "@/lib/api/client";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { formatXlm, formatXlmWithUnit, truncateHash } from "@/lib/format-xlm";
+import { STELLAR_EXPLORER_BASE } from "@/lib/stellar/explorer";
 import type {
   BuilderInventoryItem,
   BuilderLineItem,
@@ -252,7 +253,7 @@ export function MobileShop({
                 </span>
               </div>
               <a
-                href={`https://stellar.expert/explorer/testnet/tx/${escrowTxHash}`}
+                href={`${STELLAR_EXPLORER_BASE}/tx/${escrowTxHash}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 text-xs font-mono text-[#5b7cff] hover:underline"

@@ -12,6 +12,7 @@ import { cn } from "@/components/ui/cn";
 import { apiPost } from "@/lib/api/client";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { formatXlm, formatXlmWithUnit, truncateHash } from "@/lib/format-xlm";
+import { STELLAR_EXPLORER_BASE } from "@/lib/stellar/explorer";
 
 /**
  * Family's interactive wishlist builder.
@@ -273,7 +274,7 @@ export function WishlistBuilder({
               </span>
             </p>
             <a
-              href={`https://stellar.expert/explorer/testnet/tx/${escrowTxHash}`}
+              href={`${STELLAR_EXPLORER_BASE}/tx/${escrowTxHash}`}
               target="_blank"
               rel="noreferrer"
               className="mt-4 inline-flex items-center gap-2 text-sm font-mono text-accent hover:text-accent-light transition-colors"

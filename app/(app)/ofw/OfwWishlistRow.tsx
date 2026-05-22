@@ -20,6 +20,7 @@ import {
 } from "@/app/(app)/ofw/actions";
 import { apiPost } from "@/lib/api/client";
 import { formatXlm, formatXlmWithUnit, truncateHash } from "@/lib/format-xlm";
+import { STELLAR_EXPLORER_BASE } from "@/lib/stellar/explorer";
 import { timeAgo } from "@/lib/time-ago";
 
 /**
@@ -317,7 +318,7 @@ function TrailingAction({
         )}
         {escrowTxHash ? (
           <a
-            href={`https://stellar.expert/explorer/testnet/tx/${escrowTxHash}`}
+            href={`${STELLAR_EXPLORER_BASE}/tx/${escrowTxHash}`}
             target="_blank"
             rel="noreferrer"
             aria-label="View lock tx on Stellar Expert"
@@ -334,7 +335,7 @@ function TrailingAction({
   if (escrowTxHash) {
     return (
       <a
-        href={`https://stellar.expert/explorer/testnet/tx/${escrowTxHash}`}
+        href={`${STELLAR_EXPLORER_BASE}/tx/${escrowTxHash}`}
         target="_blank"
         rel="noreferrer"
         aria-label="View on Stellar Expert"

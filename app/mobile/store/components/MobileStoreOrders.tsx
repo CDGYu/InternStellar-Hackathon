@@ -13,6 +13,7 @@ import {
 
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { formatXlmWithUnit, truncateHash } from "@/lib/format-xlm";
+import { STELLAR_EXPLORER_BASE } from "@/lib/stellar/explorer";
 import { timeAgo } from "@/lib/time-ago";
 
 import { MobileStoreCreateOrderForm } from "./MobileStoreCreateOrderForm";
@@ -204,7 +205,7 @@ function OrderCard({
           </span>
           {variant === "released" && order.release_tx_hash ? (
             <a
-              href={`https://stellar.expert/explorer/testnet/tx/${order.release_tx_hash}`}
+              href={`${STELLAR_EXPLORER_BASE}/tx/${order.release_tx_hash}`}
               target="_blank"
               rel="noopener noreferrer"
               className="text-[11px] font-mono text-[#5b7cff] hover:underline"
@@ -270,7 +271,7 @@ function LockedOrderCard({ order }: { order: StoreOrder }) {
             </span>
             {order.escrow_tx_hash ? (
               <a
-                href={`https://stellar.expert/explorer/testnet/tx/${order.escrow_tx_hash}`}
+                href={`${STELLAR_EXPLORER_BASE}/tx/${order.escrow_tx_hash}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-[11px] font-mono text-[#5b7cff] hover:underline"

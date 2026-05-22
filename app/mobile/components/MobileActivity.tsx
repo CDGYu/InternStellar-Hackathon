@@ -2,6 +2,7 @@ import { ArrowDownCircle, CheckCircle, Lock, TrendingUp } from "lucide-react";
 
 import type { SettlementRow } from "@/lib/dashboard/ofw";
 import { formatXlmWithUnit, truncateHash } from "@/lib/format-xlm";
+import { STELLAR_EXPLORER_BASE } from "@/lib/stellar/explorer";
 import { timeAgo } from "@/lib/time-ago";
 
 type MobileActivityProps = {
@@ -89,7 +90,7 @@ function ActivityRow({ row }: { row: SettlementRow }) {
         </p>
         <div className="mt-2 flex items-center gap-2 text-[11px] text-[#9ca3af]">
           <a
-            href={`https://stellar.expert/explorer/testnet/tx/${row.tx_hash}`}
+            href={`${STELLAR_EXPLORER_BASE}/tx/${row.tx_hash}`}
             target="_blank"
             rel="noopener noreferrer"
             className="font-mono text-[#5b7cff] hover:underline"

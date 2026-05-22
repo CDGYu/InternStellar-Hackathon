@@ -15,6 +15,7 @@ import {
 import { cn } from "@/components/ui/cn";
 import { apiPost } from "@/lib/api/client";
 import { formatXlm, formatXlmWithUnit, truncateHash } from "@/lib/format-xlm";
+import { STELLAR_EXPLORER_BASE } from "@/lib/stellar/explorer";
 
 /**
  * OFW "Send Funds" form.
@@ -140,7 +141,7 @@ export function SendFundsForm({ ofwId }: { ofwId: string }) {
               {formatXlmWithUnit(BigInt(receipt.total_stroops))} sent
             </h2>
             <a
-              href={`https://stellar.expert/explorer/testnet/tx/${receipt.tx_hash}`}
+              href={`${STELLAR_EXPLORER_BASE}/tx/${receipt.tx_hash}`}
               target="_blank"
               rel="noreferrer"
               className="mt-3 inline-flex items-center gap-2 text-sm font-mono text-accent hover:text-accent-light transition-colors"

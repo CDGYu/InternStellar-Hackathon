@@ -15,6 +15,7 @@ import {
 import { loadUserProfile } from "@/lib/auth-role";
 import { loadStoreDashboard } from "@/lib/dashboard/store";
 import { formatXlmWithUnit, truncateHash } from "@/lib/format-xlm";
+import { STELLAR_EXPLORER_BASE } from "@/lib/stellar/explorer";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { timeAgo } from "@/lib/time-ago";
 
@@ -285,7 +286,7 @@ function OrderQueue({
                   </span>
                 ) : o.escrow_tx_hash ? (
                   <a
-                    href={`https://stellar.expert/explorer/testnet/tx/${o.escrow_tx_hash}`}
+                    href={`${STELLAR_EXPLORER_BASE}/tx/${o.escrow_tx_hash}`}
                     target="_blank"
                     rel="noreferrer"
                     className="shrink-0 inline-flex items-center justify-center h-10 w-10 rounded-xl bg-surface shadow-neu hover:shadow-neu-hover hover:-translate-y-0.5 active:shadow-neu-inset-sm transition-all duration-300 ease-soft text-ink"

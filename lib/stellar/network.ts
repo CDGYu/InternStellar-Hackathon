@@ -50,10 +50,10 @@ const resolved = resolveNetwork();
 export const STELLAR_NETWORK = resolved.label;
 export const NETWORK_PASSPHRASE = resolved.passphrase;
 
-// Stellar Expert base URL for the active network. UI explorer links should
-// import this instead of hardcoding "/explorer/testnet/..." so flipping to
-// mainnet via env var rewrites every link in the app.
-export const STELLAR_EXPLORER_BASE =
-  resolved.label === "public"
-    ? "https://stellar.expert/explorer/public"
-    : "https://stellar.expert/explorer/testnet";
+// Stellar Expert base URL for the active network. Re-exported from the
+// SDK-free explorer module so server code and tests can import it from here,
+// while CLIENT components import it from "@/lib/stellar/explorer" directly
+// (importing this file would drag @stellar/stellar-sdk into the browser
+// bundle). The explorer module resolves the network from
+// NEXT_PUBLIC_STELLAR_NETWORK so it works client-side — see its doc comment.
+export { STELLAR_EXPLORER_BASE } from "./explorer";

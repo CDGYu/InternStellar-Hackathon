@@ -14,6 +14,7 @@ import {
 import { cn } from "@/components/ui/cn";
 import { apiPost } from "@/lib/api/client";
 import { formatXlm, formatXlmWithUnit, truncateHash } from "@/lib/format-xlm";
+import { STELLAR_EXPLORER_BASE } from "@/lib/stellar/explorer";
 
 /**
  * Bills panel — OFW pays household utilities (Meralco, Maynilad, …)
@@ -312,7 +313,7 @@ function BillRowCard({
           <p className="text-[11px] text-ink-muted font-mono mt-1.5">
             →{" "}
             <a
-              href={`https://stellar.expert/explorer/testnet/account/${bill.biller.stellar_address}`}
+              href={`${STELLAR_EXPLORER_BASE}/account/${bill.biller.stellar_address}`}
               target="_blank"
               rel="noreferrer"
               className="text-accent hover:text-accent-light transition-colors"

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, ArrowUpRight, CheckCircle, TrendingUp } from "lucide-react";
 import { apiPost } from "@/lib/api/client";
 import { formatXlm, formatXlmWithUnit, truncateHash } from "@/lib/format-xlm";
+import { STELLAR_EXPLORER_BASE } from "@/lib/stellar/explorer";
 
 type MobileSendFundsProps = {
   ofwId: string;
@@ -85,7 +86,7 @@ export function MobileSendFunds({ ofwId, onBack }: MobileSendFundsProps) {
           <p className="text-[11px] uppercase tracking-widest text-[#6b7280] font-bold mb-2">Deposit Complete</p>
           <h2 className="text-3xl font-extrabold mb-2">{formatXlmWithUnit(BigInt(receipt.total_stroops))} sent</h2>
           <a
-            href={`https://stellar.expert/explorer/testnet/tx/${receipt.tx_hash}`}
+            href={`${STELLAR_EXPLORER_BASE}/tx/${receipt.tx_hash}`}
             target="_blank"
             rel="noreferrer"
             className="inline-flex items-center text-[#5b7cff] font-mono text-sm hover:underline"
