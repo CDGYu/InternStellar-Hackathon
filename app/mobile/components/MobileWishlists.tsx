@@ -125,7 +125,21 @@ export function MobileWishlists({
                 </button>
               )}
 
-              {isOfw && (w.status === "locked" || w.status === "delivered") && (
+              {/* Funds are locked but the store hasn't marked the order
+                  delivered yet. Releasing now would 409 (invalid_status,
+                  expected "delivered"), so show a disabled waiting state
+                  instead of an actionable button. */}
+              {isOfw && w.status === "locked" && (
+                <button
+                  disabled
+                  className="w-full bg-gray-100 text-gray-400 py-3 rounded-2xl font-bold flex justify-center items-center gap-2 cursor-not-allowed"
+                >
+                  Awaiting store delivery
+                  <Clock className="w-4 h-4" />
+                </button>
+              )}
+
+              {isOfw && w.status === "delivered" && (
                 <button
                   onClick={() => confirmDelivery(w.id)}
                   disabled={submittingId === w.id}
