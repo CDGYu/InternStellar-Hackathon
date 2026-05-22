@@ -25,9 +25,10 @@ export const dynamic = "force-dynamic";
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams?: { registered?: string };
+  searchParams?: Promise<{ registered?: string }>;
 }) {
-  const justRegistered = searchParams?.registered === "1";
+  const { registered } = (await searchParams) ?? {};
+  const justRegistered = registered === "1";
 
   return (
     <main className="relative min-h-screen flex items-center justify-center px-4 py-16">

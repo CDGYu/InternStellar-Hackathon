@@ -40,6 +40,13 @@ cp .env.example .env.local   # then fill in Supabase + Stellar secrets
 npm run dev
 ```
 
+### One-time Supabase dashboard toggles
+These cannot be configured via SQL or the MCP — flip them once per project:
+- **Authentication → Providers → Email → Leaked password protection: ON.**
+  Checks new passwords against HaveIBeenPwned.org at sign-up / password-change
+  time. Required for production posture; the Supabase Security Advisor flags
+  the project until this is enabled.
+
 ## 🌐 Deployment
 
 ### Testnet
@@ -53,9 +60,17 @@ npm run dev
   ![Mainnet Screenshot](./screenshots/mainnet.png)
 
 ## 🎥 Demo
-- 🔗 Live App: [link]
+- 🔗 Live App: https://internstellar-hackathon.vercel.app/
 - 🎬 Demo Video: [YouTube / Loom link]
 - 🖼 Pitch Deck: [Google Slides / Canva link]
+
+> **Live App credentials (testnet demo data):**
+> - OFW — `maria.ofw@internstellar.demo`
+> - Family — `cora.family@internstellar.demo`
+> - Store — `nena.store@internstellar.demo`
+> - Password — `demo123456` for all three.
+>
+> Readiness probe: `GET https://internstellar-hackathon.vercel.app/api/health` should return `{ chain: "ok", db: "ok" }` once the Vercel project's env vars are populated (see `docs/handoffs/p4-charles.md` §"Hosted Deployment").
 
 ## 👨‍💻 Team
 | Name | Role | GitHub |

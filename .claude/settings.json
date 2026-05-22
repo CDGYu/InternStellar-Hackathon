@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s -A \"Mozilla/5.0 \\(iPhone\\) Mobile\" -o /dev/null -w \"store=%{http_code}\\\\n\" http://localhost:3000/mobile/store)",
+      "PowerShell(\"stopped\")",
+      "Bash(git commit -m ' *)",
+      "Bash(curl -s -A \"Mozilla/5.0 \\(iPhone\\) Mobile\" -o /dev/null -w \"mobile-ofw=%{http_code}\\\\n\" http://localhost:3000/mobile/ofw)",
+      "Bash(curl -s -A \"Mozilla/5.0 \\(iPhone\\) Mobile\" -o /dev/null -w \"mobile-family=%{http_code}\\\\n\" http://localhost:3000/mobile/family)"
+    ]
+  }
+}

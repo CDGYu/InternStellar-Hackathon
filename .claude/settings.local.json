@@ -3,7 +3,42 @@
     "allow": [
       "Bash(git checkout *)",
       "Bash(git add *)",
-      "Bash(git grep *)"
+      "Bash(git grep *)",
+      "PowerShell(\"stopped\")",
+      "Bash(git merge --no-ff feat/mobile-phase-4 -m ' *)",
+      "Bash(cat)",
+      "Bash(node /tmp/derive-pubkey.mjs)",
+      "mcp__claude_ai_Supabase__list_projects",
+      "mcp__claude_ai_Supabase__execute_sql",
+      "Bash(curl -s -A \"Mozilla/5.0 \\(iPhone\\) Mobile\" -o /dev/null -w \"register=%{http_code}\\\\n\" http://localhost:3000/mobile/register)",
+      "PowerShell(\"killed\")",
+      "Bash(git commit -m ' *)",
+      "Bash(curl -s -A \"Mozilla/5.0 \\(Windows NT 10.0\\) Chrome/120\" -o /dev/null -w \"web-ofw=%{http_code}\\\\n\" http://localhost:3000/ofw)",
+      "Bash(curl -s -A \"Mozilla/5.0 \\(Windows NT 10.0\\) Chrome/120\" -o /dev/null -w \"ofw=%{http_code}\\\\n\" http://localhost:3000/ofw)",
+      "Bash(curl -s -A \"Mozilla/5.0 \\(Windows NT 10.0\\) Chrome/120\" -o /dev/null -w \"family=%{http_code}\\\\n\" http://localhost:3000/family)",
+      "Bash(git merge --no-ff feat/mobile-feedback-fixes -m ' *)",
+      "Bash(curl -s -A \"Mozilla/5.0 \\(iPhone\\) Mobile\" -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:3000/mobile/login)",
+      "Bash(curl -s -A \"Mozilla/5.0 \\(Windows NT 10.0\\) Chrome/120\" -o /dev/null -w \"web-login=%{http_code}\\\\n\" http://localhost:3000/login)",
+      "Bash(curl -s -A \"Mozilla/5.0 \\(Windows NT 10.0\\) Chrome/120\" \"http://localhost:3000/login?registered=1\")",
+      "Bash(curl -s -A \"Mozilla/5.0 \\(iPhone\\) Mobile\" -o /dev/null -w \"mobile-login=%{http_code}\\\\n\" http://localhost:3000/mobile/login)",
+      "Bash(curl -s -A \"Mozilla/5.0 \\(iPhone\\) Mobile\" -o /dev/null -w \"mobile-settings=%{http_code}\\\\n\" http://localhost:3000/mobile/settings)",
+      "Bash(curl -s -A \"Mozilla/5.0 \\(iPhone\\) Mobile\" -o /dev/null -w \"mobile-confirmed=%{http_code}\\\\n\" http://localhost:3000/mobile/auth/confirmed)",
+      "Bash(curl -s -A \"Mozilla/5.0 \\(Windows NT 10.0\\) Chrome/120\" -o /dev/null -w \"web-settings=%{http_code}\\\\n\" http://localhost:3000/settings)",
+      "WebFetch(domain:horizon-testnet.stellar.org)",
+      "Bash(git push *)",
+      "Bash(Select-Object -First 40)",
+      "PowerShell(npx tsc --noEmit -p tsconfig.json 2>&1)",
+      "PowerShell(git add \"app/\\(app\\)/ofw/OfwWishlistRow.tsx\" \"app/mobile/components/MobileWishlists.tsx\")",
+      "PowerShell(git push origin main)",
+      "PowerShell(git fetch origin)",
+      "PowerShell(git rev-list --left-right --count origin/main...main)",
+      "PowerShell(git pull --rebase origin main)",
+      "PowerShell(git stash push -m \"wip-settings\" -- .claude/settings.local.json)",
+      "PowerShell(git stash pop)",
+      "PowerShell(git push origin main; Write-Output \"---- exit $LASTEXITCODE ----\"; git --no-pager log --oneline -3)"
+    ],
+    "additionalDirectories": [
+      "C:\\Users\\user\\Downloads\\InternStellar-Hackathon\\.git"
     ]
   }
 }

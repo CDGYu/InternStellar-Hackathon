@@ -14,6 +14,14 @@
 --     P3 button wired via the cookie-bound client (e.g. "Mark delivered")
 --     just works without a policies.sql change.
 --
+-- 2026-05-22 hardening pass:
+--   * Every `auth.uid()` / `auth.role()` call is wrapped in `(select …)` so
+--     Postgres caches the value per query instead of re-evaluating per row
+--     (clears Supabase advisor lint `auth_rls_initplan`).
+--   * The previously overlapping wishlist + wishlist_item policies are
+--     consolidated into one policy per (action) so there are no more
+--     "multiple permissive policies for the same role + action" lints.
+--
 -- Idempotent: safe to re-run.
 
 -- ------------------------------------------------------------
@@ -43,17 +51,12 @@ create policy read_all_profiles on profiles
   for select using (true);
 
 -- inventory: any signed-in user can browse the store's catalogue.
+-- `(select auth.role())` caches the value across the planner's row eval.
 create policy auth_reads_inventory on inventory
-  for select using (auth.role() = 'authenticated');
+  for select using ((select auth.role()) = 'authenticated');
 
--- wishlist: a family sees ONLY its own wishlists...
-create policy family_reads_own_wishlist on wishlist
-  for select using (auth.uid() = family_id);
-
--- ...and the store sees all of them (it needs the incoming-order feed).
--- Kept permissive for the demo — one store, scoping adds no value here.
-create policy store_reads_wishlist on wishlist
-  for select using (auth.role() = 'authenticated');
+-- wishlist: SELECT is consolidated below into wishlist_select so we
+-- don't trigger the "multiple permissive policies" advisor.
 
 -- wishlist_item / settlement: open reads. Line items and the on-chain
 -- audit trail aren't sensitive between the demo's single family + store.
@@ -78,7 +81,7 @@ drop policy if exists dev_write_wishlist_item on wishlist_item;
 drop policy if exists dev_write_settlement    on settlement;
 
 -- ------------------------------------------------------------
--- 4. Narrow write policies (Day 5 enforced ruleset)
+-- 4. Consolidated read + write policies (2026-05-22 hardening)
 --
 -- profiles    — no cookie-bound writes. registerAction inserts via
 --               service_role; users editing their own profile would
@@ -89,47 +92,112 @@ drop policy if exists dev_write_settlement    on settlement;
 -- wishlist    — family writes its own (draft → pending_approval, etc).
 --               Store updates any wishlist (used by "Mark delivered" —
 --               status transitions are validated in API/UI, not in RLS).
+--               Each (action) gets exactly ONE policy: SELECT, INSERT,
+--               UPDATE, DELETE — so the "multiple permissive policies"
+--               advisor stays clear.
 -- wishlist_item — family can add/remove items on its own wishlists.
+--               SELECT stays open (line items aren't sensitive in the
+--               single-store demo); writes are gated by family ownership
+--               of the parent wishlist.
 -- settlement  — append-only via service_role only; no cookie-bound writes.
 -- ------------------------------------------------------------
 drop policy if exists family_writes_own_wishlist  on wishlist;
 drop policy if exists store_updates_wishlist      on wishlist;
 drop policy if exists family_writes_wishlist_item on wishlist_item;
+drop policy if exists wishlist_select             on wishlist;
+drop policy if exists wishlist_insert             on wishlist;
+drop policy if exists wishlist_update             on wishlist;
+drop policy if exists wishlist_delete             on wishlist;
+drop policy if exists wishlist_item_insert        on wishlist_item;
+drop policy if exists wishlist_item_update        on wishlist_item;
+drop policy if exists wishlist_item_delete        on wishlist_item;
 
--- A family writes (inserts / updates / deletes) only its own wishlists.
--- `auth.uid() = family_id` enforced on both the OLD row (USING) and the
--- NEW row (WITH CHECK), so a family can't slip a row to another family
--- mid-update.
-create policy family_writes_own_wishlist on wishlist
-  for all
-  using      (auth.uid() = family_id)
-  with check (auth.uid() = family_id);
+-- A family sees its own wishlists. The store (role='store') sees all of
+-- them (single-store demo, scoping is meaningless). One SELECT policy so
+-- the planner only evaluates one predicate per row instead of two.
+create policy wishlist_select on wishlist
+  for select
+  using (
+    (select auth.uid()) = family_id
+    or exists (
+      select 1 from profiles p
+       where p.id = (select auth.uid())
+         and p.role = 'store'
+    )
+  );
 
--- The store can update any wishlist row it can see. We don't constrain
--- the status transition here — that's the API/UI's job. The role check
--- is the gate (only profiles.role = 'store' can write at all).
-create policy store_updates_wishlist on wishlist
+-- Only the family inserts via the cookie-bound client. Store INSERTs
+-- (POST /api/store/orders/create) go through service_role, which bypasses
+-- RLS, so no `or store-caller` branch is needed here.
+create policy wishlist_insert on wishlist
+  for insert
+  with check ((select auth.uid()) = family_id);
+
+-- Family updates their own row; store can update any wishlist (for "Mark
+-- delivered"). Combined into one policy so UPDATE only evaluates one
+-- permissive predicate per row.
+create policy wishlist_update on wishlist
   for update
-  using      (exists (select 1 from profiles p where p.id = auth.uid() and p.role = 'store'))
-  with check (exists (select 1 from profiles p where p.id = auth.uid() and p.role = 'store'));
+  using (
+    (select auth.uid()) = family_id
+    or exists (
+      select 1 from profiles p
+       where p.id = (select auth.uid())
+         and p.role = 'store'
+    )
+  )
+  with check (
+    (select auth.uid()) = family_id
+    or exists (
+      select 1 from profiles p
+       where p.id = (select auth.uid())
+         and p.role = 'store'
+    )
+  );
 
--- A family can manage line items on wishlists it owns. The join through
--- wishlist enforces "own wishlist" for both the row being touched and
--- the parent wishlist after the change.
-create policy family_writes_wishlist_item on wishlist_item
-  for all
+-- DELETE is family-only; the store never deletes a wishlist (cancellation
+-- transitions status to 'cancelled' via UPDATE instead).
+create policy wishlist_delete on wishlist
+  for delete
+  using ((select auth.uid()) = family_id);
+
+-- wishlist_item: writes are gated by family ownership of the parent
+-- wishlist; the SELECT side is handled by `read_all_wishlist_item` above
+-- (single source of truth, no overlap with the write policies).
+create policy wishlist_item_insert on wishlist_item
+  for insert
+  with check (
+    exists (
+      select 1 from wishlist w
+       where w.id = wishlist_item.wishlist_id
+         and w.family_id = (select auth.uid())
+    )
+  );
+
+create policy wishlist_item_update on wishlist_item
+  for update
   using (
     exists (
       select 1 from wishlist w
        where w.id = wishlist_item.wishlist_id
-         and w.family_id = auth.uid()
+         and w.family_id = (select auth.uid())
     )
   )
   with check (
     exists (
       select 1 from wishlist w
        where w.id = wishlist_item.wishlist_id
-         and w.family_id = auth.uid()
+         and w.family_id = (select auth.uid())
+    )
+  );
+
+create policy wishlist_item_delete on wishlist_item
+  for delete
+  using (
+    exists (
+      select 1 from wishlist w
+       where w.id = wishlist_item.wishlist_id
+         and w.family_id = (select auth.uid())
     )
   );
 

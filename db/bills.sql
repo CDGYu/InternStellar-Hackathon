@@ -77,8 +77,11 @@ drop policy if exists read_all_bills         on bill;
 drop policy if exists read_all_bill_payments on bill_payment;
 
 create policy read_all_billers       on biller       for select using (true);
-create policy read_all_bills         on bill         for select using (auth.role() = 'authenticated');
-create policy read_all_bill_payments on bill_payment for select using (auth.role() = 'authenticated');
+-- `(select auth.role())` is the cached-per-query form. Without the subquery
+-- wrap Postgres re-evaluates the function for every row in the result set
+-- (Supabase advisor: auth_rls_initplan).
+create policy read_all_bills         on bill         for select using ((select auth.role()) = 'authenticated');
+create policy read_all_bill_payments on bill_payment for select using ((select auth.role()) = 'authenticated');
 
 -- WRITE — all writes go through server-side routes using service_role.
 -- No client-side write policies on purpose: bill creation is a
@@ -107,3 +110,10 @@ create index if not exists bill_family_id_status_idx
 
 create index if not exists bill_payment_bill_id_paid_at_idx
   on bill_payment (bill_id, paid_at desc);
+
+-- Cover the foreign keys that the advisor flagged on 2026-05-22.
+-- `bill_family_id_status_idx` already covers `bill.family_id` (it leads on
+-- family_id), so the advisor reads it as covered. The biller_id and
+-- paid_by FKs are the ones still flagged — add them now.
+create index if not exists bill_biller_id_idx       on bill         (biller_id);
+create index if not exists bill_payment_paid_by_idx on bill_payment (paid_by);

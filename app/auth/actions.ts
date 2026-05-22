@@ -1,12 +1,56 @@
 "use server";
 
 import { Keypair } from "@stellar/stellar-sdk";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { dashboardForRole, type Role } from "@/app/auth/role-routes";
 import { loadUserProfile } from "@/lib/auth-role";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+
+/**
+ * Derive the request's origin (https://host) from the `host` header so we
+ * can build absolute callback URLs that follow whichever deploy the user
+ * is on (prod, preview, localhost). Returns null when the header is
+ * missing — caller then falls back to the Supabase project's Site URL.
+ */
+async function requestOrigin(): Promise<string | null> {
+  const h = await headers();
+  const host = h.get("host");
+  if (!host) return null;
+  const proto = host.startsWith("localhost") || host.startsWith("127.")
+    ? "http"
+    : "https";
+  return `${proto}://${host}`;
+}
+
+/**
+ * Wrap a Supabase-client-construction call so a missing-env throw becomes a
+ * friendly form error instead of bubbling out of the Server Action and
+ * surfacing as Next.js's opaque "Application error / Digest …" page.
+ *
+ * In normal local/prod operation, every call here returns a real client.
+ * In a misconfigured deploy (env vars unset), `error` is populated with a
+ * one-line reason the caller can render directly in the form.
+ */
+function safeServerClient(): { client: ReturnType<typeof createSupabaseServerClient> | null; error: string | null } {
+  try {
+    return { client: createSupabaseServerClient(), error: null };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Server-side Supabase client could not be created.";
+    return { client: null, error: msg };
+  }
+}
+
+function safeAdminClient(): { client: ReturnType<typeof getSupabaseAdmin> | null; error: string | null } {
+  try {
+    return { client: getSupabaseAdmin(), error: null };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Server-side Supabase admin client could not be created.";
+    return { client: null, error: msg };
+  }
+}
 
 /**
  * For the demo, every OFW and Family signs through the server's shared
@@ -61,7 +105,15 @@ export async function signInAction(
     return { error: "Email and password are required." };
   }
 
-  const supabase = createSupabaseServerClient();
+  const { client: supabase, error: cfgErr } = safeServerClient();
+  if (cfgErr || !supabase) {
+    return {
+      error:
+        "Deployment not configured: " +
+        (cfgErr ?? "Supabase env vars missing") +
+        " — visit /status for the checklist.",
+    };
+  }
 
   const { data, error } = await supabase.auth.signInWithPassword({
     email,
@@ -73,7 +125,25 @@ export async function signInAction(
 
   // Look up the role via service_role — see lib/auth-role.ts for why we
   // bypass the cookie-bound client here. data.user is already verified.
-  const { profile, error: pErr } = await loadUserProfile(data.user.id);
+  // Wrapped in try/catch because loadUserProfile transitively calls
+  // getSupabaseAdmin(), which throws if SUPABASE_SERVICE_ROLE_KEY is unset
+  // on the deploy. Without this, the throw escapes the Server Action and
+  // surfaces as Next.js's opaque "Application error / Digest …" page.
+  let profile: Awaited<ReturnType<typeof loadUserProfile>>["profile"];
+  let pErr: string | null;
+  try {
+    const lookup = await loadUserProfile(data.user.id);
+    profile = lookup.profile;
+    pErr = lookup.error;
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "profile_lookup_threw";
+    return {
+      error:
+        "Signed in, but profile lookup failed (admin client not configured): " +
+        msg +
+        " — visit /status for the checklist.",
+    };
+  }
   if (pErr) {
     return { error: `Signed in, but profile lookup failed: ${pErr}` };
   }
@@ -94,7 +164,12 @@ export async function signInAction(
  * / so the user isn't stuck on a broken header.
  */
 export async function signOutAction() {
-  const supabase = createSupabaseServerClient();
+  const { client: supabase } = safeServerClient();
+  // If config is broken there's nothing to sign out of — send the user to
+  // /status so they (or the operator) can see why the deploy is degraded.
+  if (!supabase) {
+    redirect("/status");
+  }
   const { error } = await supabase.auth.signOut();
   redirect(error ? "/" : "/login");
 }
@@ -146,14 +221,33 @@ export async function registerAction(
     return { error: "Pick a role: OFW, Family, or Store." };
   }
 
-  const supabase = createSupabaseServerClient();
+  const { client: supabase, error: cfgErr } = safeServerClient();
+  if (cfgErr || !supabase) {
+    return {
+      error:
+        "Deployment not configured: " +
+        (cfgErr ?? "Supabase env vars missing") +
+        " — visit /status for the checklist.",
+    };
+  }
 
   // ---- 1. Create the auth user -------------------------------------
+  // emailRedirectTo is a belt-and-suspenders. The current confirm email
+  // template uses {SITE_URL}/auth/confirm?token_hash=... -- so the
+  // primary control is the Site URL configured in Supabase Auth. But
+  // setting emailRedirectTo here means:
+  //   - Future password-reset flows (resetPasswordForEmail) land in the
+  //     right place automatically.
+  //   - If the template ever reverts to the default {{ .ConfirmationURL }}
+  //     (which uses redirect_to), preview deploys still work.
+  //   - Local dev signups during demo prep stay on localhost.
+  const origin = await requestOrigin();
   const { data: signUpData, error: signUpErr } = await supabase.auth.signUp({
     email,
     password,
     options: {
       data: { display_name: displayName, role },
+      ...(origin ? { emailRedirectTo: `${origin}/auth/confirm` } : {}),
     },
   });
   if (signUpErr) {
@@ -164,6 +258,23 @@ export async function registerAction(
     return { error: "Sign-up succeeded but no user was returned." };
   }
 
+  // Supabase email-enumeration protection: when email confirmation is on
+  // AND the email already exists in auth.users, signUp returns a synthetic
+  // user object with an empty `identities` array (and no real auth.users
+  // row). If we let this fall through to the profile insert below, the
+  // foreign key on profiles.id → auth.users.id will reject it. Surface a
+  // friendly message and return.
+  if (
+    signUpData.user.identities !== undefined &&
+    signUpData.user.identities !== null &&
+    signUpData.user.identities.length === 0
+  ) {
+    return {
+      error:
+        "An account with this email already exists. Try signing in instead.",
+    };
+  }
+
   // ---- 2. Insert the profile row via service_role ------------------
   // We can't rely on cookie-bound writes here because:
   //   - If the project requires email confirmation, signUp returns the
@@ -172,7 +283,15 @@ export async function registerAction(
   //     INSERT introduces a flaky failure mode.
   // Service_role bypasses RLS and is the right hammer for "trusted
   // server-side post-signup setup."
-  const admin = getSupabaseAdmin();
+  const { client: admin, error: adminCfgErr } = safeAdminClient();
+  if (adminCfgErr || !admin) {
+    return {
+      error:
+        "Account created in Auth but profile setup failed (admin client not configured): " +
+        (adminCfgErr ?? "SUPABASE_SERVICE_ROLE_KEY missing") +
+        " — visit /status for the checklist.",
+    };
+  }
   // OFW + Family share the demo signer's pubkey so the contract's
   // require_auth() matches. Store doesn't sign anything — leave null.
   const stellarPublicKey =

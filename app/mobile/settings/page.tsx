@@ -31,7 +31,7 @@ export const dynamic = "force-dynamic";
  * page.tsx still holds across both surfaces.
  */
 export default async function MobileSettingsPage() {
-  const theme = getTheme();
+  const theme = await getTheme();
 
   const supabase = createSupabaseServerClient();
   const {

@@ -51,6 +51,23 @@ Copy `.env.example` to `.env.local` and fill in real values. `.env.local` is git
 RLS — it is server-side only, must never be prefixed `NEXT_PUBLIC_`, and must never be
 committed.
 
+### Supabase Auth Site URL
+
+Email confirmation links use Supabase's **Site URL** as the prefix
+(see `app/auth/confirm/route.ts`). For each deploy environment:
+
+- Local dev: Site URL = `http://localhost:3000`
+- Production: Site URL = the Vercel production domain (e.g. `https://internstellar-eight.vercel.app`)
+
+Set this in Supabase Studio → Authentication → URL Configuration. Also
+add both `https://<production>/**` and `http://localhost:3000/**` to the
+**Redirect URLs** allow-list there so preview deploys + local dev can
+each receive the email's verify redirect.
+
+`app/auth/actions.ts` also passes `emailRedirectTo: ${requestOrigin}/auth/confirm`
+on signup so password-reset and any future default-template flows
+follow whichever deploy host the user signed up from.
+
 ## Key conventions
 
 - **Money is always stroops, always `bigint` integers.** 1 XLM = 10,000,000 stroops.

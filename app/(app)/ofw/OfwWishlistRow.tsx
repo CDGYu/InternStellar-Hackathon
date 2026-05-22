@@ -293,18 +293,28 @@ function TrailingAction({
   }
 
   if (status === "locked" || status === "delivered") {
+    // Release only succeeds once the store marks the order delivered.
+    // /api/escrow/release 409s with invalid_status (expected "delivered")
+    // if Confirm delivery fires while still "locked", so show a disabled
+    // waiting state until the store updates it.
     return (
       <div className="flex items-center gap-2 shrink-0">
-        <Button
-          type="button"
-          variant="primary"
-          size="sm"
-          onClick={onConfirmDelivery}
-          disabled={pendingApi}
-        >
-          {pendingApi ? "Confirming…" : "Confirm delivery"}
-          {pendingApi ? null : <CheckCircleIcon className="h-4 w-4" />}
-        </Button>
+        {status === "delivered" ? (
+          <Button
+            type="button"
+            variant="primary"
+            size="sm"
+            onClick={onConfirmDelivery}
+            disabled={pendingApi}
+          >
+            {pendingApi ? "Confirming…" : "Confirm delivery"}
+            {pendingApi ? null : <CheckCircleIcon className="h-4 w-4" />}
+          </Button>
+        ) : (
+          <Button type="button" variant="secondary" size="sm" disabled>
+            Awaiting delivery
+          </Button>
+        )}
         {escrowTxHash ? (
           <a
             href={`https://stellar.expert/explorer/testnet/tx/${escrowTxHash}`}

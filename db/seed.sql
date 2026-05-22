@@ -114,8 +114,13 @@ on conflict (id) do update
 --     If you regenerate the demo signer, you must also regenerate the
 --     store address so the two stay distinct.
 -- ============================================================
+-- This pubkey is the public side of STELLAR_DEMO_SECRET_KEY in .env.local.
+-- If you rotate the demo signer, also update this value (and run an
+-- UPDATE on existing demo profiles), or contract calls fail with
+-- Contract_call_failed because require_auth(from) / require_auth(family)
+-- sees a different signer than the address.
 update profiles
-   set stellar_public_key = 'GAC3WCB5ZZ5GVWDOL4XCA3UJU5ZQ4CCAODREOEDLJB5UT4Q6BZDKPYUK'
+   set stellar_public_key = 'GA5M6MWP4UU7VCNDMDT5GE6MHELVY6TQCJ2AIYXHEHEMT5CYH6HKHC6H'
  where id in (
    '11111111-1111-1111-1111-111111111111',  -- Auntie Maria (OFW)
    '22222222-2222-2222-2222-222222222222'   -- Lola Cora (Family)

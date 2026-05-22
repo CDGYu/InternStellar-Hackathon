@@ -30,7 +30,7 @@ function stroopsToXlmDisplay(stroops: bigint): string {
 }
 
 interface RouteContext {
-  params: { user_id: string };
+  params: Promise<{ user_id: string }>;
 }
 
 export async function GET(req: Request, context: RouteContext): Promise<NextResponse> {
@@ -40,7 +40,7 @@ export async function GET(req: Request, context: RouteContext): Promise<NextResp
   const caller = await requireUser(req);
   if (caller instanceof NextResponse) return caller;
 
-  const { user_id } = context.params;
+  const { user_id } = await context.params;
   if (!user_id) {
     return err(400, "invalid_body", "user_id route param is required.", undefined, { requestId });
   }

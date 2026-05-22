@@ -516,7 +516,9 @@ The last "real" sync. Tomorrow is rehearsal day. Today's sync question: **what's
 # DAY 6 — Demo Day Readiness
 
 ## Outcome
-You could be judged today and win. README is clean, repo is presentable, pitch deck is locked, you have a recorded backup video, submission materials are ready.
+You could be judged today and win. README is clean, repo is presentable, pitch deck is locked, you have a recorded backup video, **the app is deployed to a public hosted URL** that anyone can open in a browser without local setup, and submission materials are ready.
+
+The hosted deploy is **not optional** — Build on Stellar PH submissions need a working "Live App" link that judges can click. The contract address alone is not enough. See task 5 below for the structured deployment plan.
 
 ## Tasks
 
@@ -567,10 +569,14 @@ Deposit → Split → Wishlist → Lock → Deliver → Confirm → Release.
 - Supabase (Postgres + Auth + Realtime + RLS)
 
 ## Contract
-Deployed at: `C...` (testnet). Verify on [stellar.expert](https://stellar.expert/explorer/testnet/contract/C...).
+Deployed at: `CB3VGM6SU3RRJLRJMT7CRX36ARKCH222ZKGKVPMS2DU5MIAHKUFZGRDF` (Stellar testnet, frozen).
+Verify on [stellar.expert](https://stellar.expert/explorer/testnet/contract/CB3VGM6SU3RRJLRJMT7CRX36ARKCH222ZKGKVPMS2DU5MIAHKUFZGRDF).
+
+## Live App
+`https://internstellar-hackathon.vercel.app/` — Next.js 14 app deployed on Vercel, talking to Supabase (Auth/Postgres/Realtime/RLS) and the Soroban contract on Stellar testnet. Sign in with one of: `maria.ofw@internstellar.demo` (OFW), `cora.family@internstellar.demo` (Family), `nena.store@internstellar.demo` (Store) — password `demo123456`. Readiness probe: `GET https://internstellar-hackathon.vercel.app/api/health` should return `{ chain: "ok", db: "ok" }`. If it returns `503 degraded` with `chain: "unconfigured"` or `db: "err"`, the Vercel project's env vars need to be populated — see "Hosted Deployment" §5c below.
 
 ## Demo reset
-`pnpm reset` — returns the DB to clean demo state.
+`npm run reset` — returns the DB to clean demo state.
 
 ## Team
 - P1 — Contract Lead
@@ -584,18 +590,132 @@ Bullet list from pitch slide 8.
 
 Make sure `.env.example` is in the repo. Make sure `.env.local` is in `.gitignore`. Make sure no service-role key is in any committed file. Search the repo for the string before pushing: `git grep "service_role"` should turn up nothing in committed files.
 
-### 5. Submission materials
+### 5. Hosted Deployment (REQUIRED — Day 6)
+
+The Build on Stellar PH submission asks for a **Live App URL** that judges can click and use without cloning the repo. Localhost is not acceptable. The contract address alone is not acceptable. We need a real, reachable, env-configured public URL.
+
+**Target stack:** Vercel for the Next.js app + the existing Supabase project (already hosted) + the existing testnet Soroban contract (already deployed at `CB3VGM6SU3RRJLRJMT7CRX36ARKCH222ZKGKVPMS2DU5MIAHKUFZGRDF`). No new infrastructure to set up — only the web tier needs hosting.
+
+**Why Vercel.** Zero-config for Next.js 14 App Router, free hobby tier covers a hackathon, env vars are managed in the dashboard (no secret in git), automatic preview deploys on every push, automatic HTTPS, and Server Actions / `route.ts` handlers run on Vercel's Node runtime — which is what every file under `app/api/` already declares (`export const runtime = "nodejs"`). No code changes needed to deploy.
+
+#### 5a. Pre-deploy verification
+
+Before connecting Vercel, the local app must be working end-to-end against testnet. Run from inside `InternStellar-Hackathon/`:
+
+```powershell
+# 1. Contract source is green
+cd internstellar-contract; cargo test          # must be 27/27 green
+cd ..
+
+# 2. Next.js builds cleanly
+npm install
+npm run build                                  # zero errors, zero warnings
+
+# 3. Local API health green against testnet
+npm run dev                                    # in a separate terminal
+curl http://localhost:3000/api/health          # expect { chain: "ok", db: "ok" }
+
+# 4. Wiring tests pass
+npm run test:stellar-lib                       # 4/4
+npm run test:escrow-wiring                     # 11/11 (fix the stale assertion in scripts/_test-escrow-wiring.ts:142 first if still failing)
+npm run test:no-leaks                          # 12/12
+```
+
+If any of these fail, **do not deploy.** Fix locally first, otherwise you ship a broken URL.
+
+#### 5b. Vercel project setup
+
+1. Push the latest `main` to GitHub (the deploy will pull from there).
+2. Sign in at `https://vercel.com` with the team's GitHub account (use the org/team account, not a personal one — ownership matters for submission).
+3. Click **Add New → Project** → import `CDGYu/InternStellar-Hackathon`.
+4. **Framework Preset:** Next.js (auto-detected).
+5. **Root Directory:** `InternStellar-Hackathon` (only if the repo root is the parent — verify by clicking "Edit" next to Root Directory. If the repo root IS `InternStellar-Hackathon/`, leave blank).
+6. **Node.js Version:** 20.x (matches `engines.node >= 20.6.0` in `package.json`).
+7. **Build Command:** leave default (`next build`).
+8. **Output Directory:** leave default (`.next`).
+9. **Install Command:** leave default (`npm install`).
+10. **Do NOT click Deploy yet** — env vars first (step 5c). A deploy without env vars will succeed but the app will 503 on every chain call.
+
+#### 5c. Environment variables on Vercel
+
+In the Vercel project page → **Settings → Environment Variables** add the following. Apply each to **Production, Preview, and Development** unless noted.
+
+| Variable | Value source | Scope on Vercel |
+|---|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | Same as `.env.local` | Production + Preview + Development |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Same as `.env.local` | Production + Preview + Development |
+| `SUPABASE_SERVICE_ROLE_KEY` | Same as `.env.local` (**server-side only — never prefix with `NEXT_PUBLIC_`**) | Production + Preview |
+| `STELLAR_NETWORK` | `testnet` | Production + Preview + Development |
+| `STELLAR_RPC_URL` | `https://soroban-testnet.stellar.org` | Production + Preview + Development |
+| `STELLAR_HORIZON_URL` | `https://horizon-testnet.stellar.org` | Production + Preview + Development |
+| `STELLAR_NETWORK_PASSPHRASE` | `Test SDF Network ; September 2015` | Production + Preview + Development |
+| `NEXT_PUBLIC_CONTRACT_ID` | `CB3VGM6SU3RRJLRJMT7CRX36ARKCH222ZKGKVPMS2DU5MIAHKUFZGRDF` | Production + Preview + Development |
+| `STELLAR_DEMO_SECRET_KEY` | Same as `.env.local` (testnet Friendbot-funded keypair from `npm run fund-test-account`) | Production + Preview |
+
+**Critical:** the value of `SUPABASE_SERVICE_ROLE_KEY` and `STELLAR_DEMO_SECRET_KEY` must match the keys you already have in `.env.local`. Copy them out of `.env.local`, paste them into Vercel's encrypted env input — do **not** commit them anywhere or paste them into chat.
+
+**If the service-role key has ever been committed to git in the past:** rotate it in Supabase first (Dashboard → Project Settings → API → Reset `service_role` key), update `.env.local`, then set the new value on Vercel.
+
+#### 5d. Deploy + verify
+
+1. Click **Deploy** in Vercel. First build takes ~2–4 min.
+2. When the build finishes, Vercel assigns a URL like `https://internstellar-hackathon.vercel.app` (or `https://internstellar-hackathon-<team>.vercel.app`). Copy this URL.
+3. Smoke-test the deploy from a terminal:
+   ```powershell
+   curl https://<your-vercel-url>/api/health
+   # expect: { "chain": "ok", "db": "ok", "request_id": "..." }
+   ```
+   If `chain: "error"` → `STELLAR_RPC_URL` or `STELLAR_DEMO_SECRET_KEY` is wrong / missing on Vercel.
+   If `db: "error"` → `SUPABASE_SERVICE_ROLE_KEY` is wrong / missing on Vercel.
+4. Open the URL in a browser, sign in as `maria.ofw@internstellar.demo` / `demo123456`, walk the golden path: deposit → switch to family tab → build wishlist → switch to store tab → lock → mark delivered → switch back to family → confirm → see released state + decremented inventory. If all five beats complete, the deploy is good.
+5. Open `https://stellar.expert/explorer/testnet/contract/CB3VGM6SU3RRJLRJMT7CRX36ARKCH222ZKGKVPMS2DU5MIAHKUFZGRDF` in a second tab and confirm the new transactions show up — proves the hosted app is talking to the real testnet contract, not a stub.
+
+#### 5e. Pin the URL across the project
+
+Once `https://<your-vercel-url>` is verified green, propagate it:
+
+- **`README.md`** — ✅ done: `🔗 Live App: https://internstellar-hackathon.vercel.app/` is pinned in the Demo section, along with the three demo-account emails and the `/api/health` readiness URL.
+- **Pitch deck (`docs/pitch/pitch-deck-outline.md`)** — slide 4 caption "Live at <url>"; slide 10 closing CTA URL.
+- **Demo runbook (`docs/pitch/demo-runbook.md`)** — pre-flight step 3 already uses `localhost:3000`; add a parallel "or hosted URL" entry for the rehearsal that exercises the deployed build.
+- **Submission form (task 6 below)** — Live URL field.
+- **Out-of-band team announcement** — paste the URL into the team chat with the message "Live deploy — judge-clickable. Don't commit changes after this without re-verifying the hosted build."
+
+#### 5f. Post-deploy guardrails
+
+- **Branch deploys are PUBLIC.** Vercel automatically deploys every branch push to a preview URL. Make sure no in-progress branch contains a half-broken version of the demo right before judging. Either delete preview deploys for stale branches or pause the GitHub integration during the judging window.
+- **Vercel free-tier limits:** 100 GB-hours/month bandwidth on the Hobby plan. For a single demo + judging session this is irrelevant. Don't switch plans.
+- **`STELLAR_DEMO_SECRET_KEY` runs out of XLM after enough demo runs.** Re-Friendbot via `npm run fund-test-account` (locally) and update the value on Vercel if you ever see `op_underfunded` errors from the deployed app.
+- **DB drift between local and hosted.** Both `.env.local` and Vercel point at the SAME Supabase project (this is intentional — there is one demo dataset). `npm run reset` from any operator's laptop resets the data the hosted app sees too. Coordinate before resetting during a live demo.
+
+#### 5g. Emergency: rollback the hosted deploy
+
+If a bad commit reaches Vercel:
+
+1. Vercel project → **Deployments** tab → find the previous green deploy → **"Promote to Production"**. Takes ~10 seconds.
+2. Alternatively: `git revert <bad-commit>` and push — Vercel redeploys on push.
+3. As a last resort, the CLI fallback `bash internstellar-contract/scripts/demo.sh` runs the golden path entirely from the deployer's terminal against testnet — no hosted app needed. This is the demo-day safety net the runbook already documents.
+
+### P4 Day-6 deploy gate
+
+- ✅ Vercel project created against `CDGYu/InternStellar-Hackathon`, building on every push to `main`.
+- ✅ All 9 env vars set on Production scope; `SUPABASE_SERVICE_ROLE_KEY` and `STELLAR_DEMO_SECRET_KEY` set on Preview too but **not** on Development.
+- ✅ `curl https://<deploy>/api/health` returns `{ chain: "ok", db: "ok" }`.
+- ✅ Golden path completes through the hosted UI with real testnet transactions visible on Stellar Expert.
+- ✅ Live URL pinned in `README.md`, pitch deck, demo runbook, and the team chat.
+
+### 6. Submission materials
 Check the hackathon submission portal. Typical asks:
 - Project name and tagline
 - One-paragraph description (use the pitch paragraph)
 - Demo video URL (your backup video — kills two birds)
-- Live URL (Vercel deploy if you have one, otherwise the contract address)
-- GitHub repo URL
+- **Live URL** — the Vercel deploy from task 5 above. This field is required, not optional. Use the production URL (e.g. `https://internstellar-hackathon.vercel.app`), not a preview URL, not the contract address.
+- Deployed contract address: `CB3VGM6SU3RRJLRJMT7CRX36ARKCH222ZKGKVPMS2DU5MIAHKUFZGRDF` (testnet). Pair with the Stellar Expert link if the form has a separate "contract" field.
+- GitHub repo URL (point at the `golden-path-v1` tagged commit if the form allows a tag/branch — judges should see exactly the code that was rehearsed).
 - Team member info
 
 Fill the form **today**, even if you don't submit yet. The form will surface anything missing. Tomorrow you'll just review and click submit.
 
-### 6. Last integration sync (5 min, not 15)
+### 7. Last integration sync (5 min, not 15)
 "Anything still flaky? Speak now." If yes, decide: fix tonight or accept. Either is OK. Pretending it's fine is not OK.
 
 ## Watch out for
@@ -605,7 +725,8 @@ Fill the form **today**, even if you don't submit yet. The form will surface any
 
 ## Hand-offs
 - **You owe the team** the recorded backup video link.
-- **You owe the judges (via submission)** a complete, clean repo and pitch deck.
+- **You owe the team** the production Vercel URL, pinned in the team chat, with `curl /api/health` evidence that it's green.
+- **You owe the judges (via submission)** a complete, clean repo, a pitch deck, AND a live hosted URL that loads the app without local setup.
 
 ---
 
@@ -632,6 +753,8 @@ A calm team that demos a working loop beats an exhausted team with an ambitious 
 - Reset script run? ✅
 - Stellar accounts funded? ✅
 - Contract address still working? Check stellar.expert. ✅
+- **Hosted Vercel URL reachable?** `curl https://<deploy>/api/health` → `{ chain: "ok", db: "ok" }`. ✅
+- **Hosted golden path still works?** Sign in as Maria on the deployed URL, run one full deposit → lock → release on testnet. ✅
 - Backup video accessible offline? ✅
 - Pitch deck open in two places (laptop + phone as backup)? ✅
 - Team knows who says what? ✅
@@ -716,10 +839,11 @@ By end of Day 5:
 - `scripts/reset-demo.ts` — the reset runner.
 
 By end of Day 6:
-- `README.md` — finalised.
+- `README.md` — finalised, with the real Live App URL and contract address pinned.
 - The pitch deck (in `docs/` or linked from the README).
+- A **production Vercel deployment** of `InternStellar-Hackathon/` against the testnet contract, with all 9 env vars set in the dashboard (Supabase URL/anon/service-role, the four Stellar network vars, the contract id, and the demo signer secret). The deploy is the live "front door" for judges — see Day 6 task 5 for the structured procedure.
 
-This is your footprint in the repo. Easy to grep, easy to audit.
+This is your footprint in the repo + the hosted system. Easy to grep, easy to audit, easy to demo.
 
 ---
 

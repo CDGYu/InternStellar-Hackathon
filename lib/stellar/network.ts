@@ -17,8 +17,13 @@ import { Networks } from "@stellar/stellar-sdk";
 // Exported (vs. inlined) so tests can pass a fake env object and verify both
 // branches without spawning a subprocess. Production code paths use the
 // cached constants below; tests should only call resolveNetwork() directly.
+//
+// The param is the minimal shape we read rather than NodeJS.ProcessEnv: under
+// Next.js's global type augmentation ProcessEnv requires NODE_ENV, which would
+// otherwise force every test caller to pass a full env just to exercise two
+// keys. `process.env` is structurally assignable to this shape.
 export function resolveNetwork(
-  env: NodeJS.ProcessEnv = process.env,
+  env: Record<string, string | undefined> = process.env,
 ): { label: "testnet" | "public"; passphrase: string } {
   const explicitPassphrase = env.STELLAR_NETWORK_PASSPHRASE;
   const label = (env.STELLAR_NETWORK ?? "testnet").toLowerCase();

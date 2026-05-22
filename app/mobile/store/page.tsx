@@ -1,51 +1,90 @@
-import Link from "next/link";
-import { Construction, ExternalLink, Menu } from "lucide-react";
+import { redirect } from "next/navigation";
+
+import { loadUserProfile } from "@/lib/auth-role";
+import { loadStoreDashboard } from "@/lib/dashboard/store";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
+
+import { MobileStoreDashboardClient } from "./MobileStoreDashboardClient";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 /**
- * Phase-4 placeholder for the mobile store dashboard. signInAction
+ * Mobile Store dashboard. Mirrors the web /store route. signInAction
  * redirects a store caller to /store on success → middleware rewrites
- * to /mobile/store for mobile UAs — so a store user logging in on a
- * phone lands here. Until Phase 4 ships, point them at the desktop
- * site for the real dashboard.
- *
- * Header carries the same brand + settings entry as the OFW/family
- * dashboards so store users can still reach /mobile/settings.
+ * to /mobile/store for mobile UAs, which lands here.
  */
-export default function MobileStorePage() {
-  return (
-    <div className="relative flex flex-col min-h-screen max-w-md mx-auto bg-[#f5f7fa] text-[#1a1d2e] font-sans">
-      <div className="px-6 py-5 flex items-center justify-between bg-white shrink-0 shadow-sm z-10">
-        <h1 className="text-lg font-extrabold tracking-tight">InternStellar</h1>
-        <Link
-          href="/mobile/settings"
-          aria-label="Open settings"
-          className="w-10 h-10 flex items-center justify-center rounded-full bg-slate-50 hover:bg-slate-100 transition-colors"
-        >
-          <Menu className="w-5 h-5" />
-        </Link>
-      </div>
+export default async function MobileStorePage() {
+  const supabase = createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
 
-      <div className="flex-1 flex flex-col items-center justify-center px-6 text-center">
-        <div className="w-16 h-16 rounded-2xl bg-amber-100 flex items-center justify-center mb-6">
-          <Construction className="w-8 h-8 text-amber-600" />
-        </div>
-        <h1 className="text-2xl font-extrabold text-[#1a1d2e] mb-3">
-          Store dashboard — coming soon
-        </h1>
-        <p className="text-[#6b7280] mb-8 max-w-sm leading-relaxed">
-          The mobile store experience is still in build. For now, please use
-          the desktop site to manage orders, inventory, and deliveries.
-        </p>
-        <Link
-          href="/store"
-          className="inline-flex items-center gap-2 bg-gradient-to-r from-[#5b7cff] to-[#7c9aff] text-white font-semibold rounded-full px-6 py-3 shadow-lg shadow-[#5b7cff]/25 active:scale-[0.98] transition-transform"
-        >
-          Open desktop store
-          <ExternalLink className="w-4 h-4" />
-        </Link>
-      </div>
-    </div>
-  );
+  const { profile } = await loadUserProfile(user.id);
+  if (profile?.role !== "store") {
+    redirect("/");
+  }
+
+  const data = await loadStoreDashboard({ storeId: user.id });
+
+  // Stringify bigints at the server→client boundary.
+  const serialized = {
+    store: data.store,
+    totals: {
+      pendingCount: data.totals.pendingCount,
+      inEscrow: data.totals.inEscrow.toString(),
+      revenue: data.totals.revenue.toString(),
+      outOfStockCount: data.totals.outOfStockCount,
+    },
+    orders: data.orders.map((o) => ({
+      id: o.id,
+      family_id: o.family_id,
+      family_name: o.family_name,
+      status: o.status,
+      total_stroops: o.total_stroops.toString(),
+      notes: o.notes,
+      escrow_tx_hash: o.escrow_tx_hash,
+      release_tx_hash: o.release_tx_hash,
+      item_count: o.item_count,
+      created_at: o.created_at,
+      updated_at: o.updated_at,
+    })),
+    receipts: data.receipts.map((r) => ({
+      order: {
+        id: r.order.id,
+        family_id: r.order.family_id,
+        family_name: r.order.family_name,
+        status: r.order.status,
+        total_stroops: r.order.total_stroops.toString(),
+        notes: r.order.notes,
+        escrow_tx_hash: r.order.escrow_tx_hash,
+        release_tx_hash: r.order.release_tx_hash,
+        item_count: r.order.item_count,
+        created_at: r.order.created_at,
+        updated_at: r.order.updated_at,
+      },
+    })),
+    inventory: data.inventory.map((i) => ({
+      id: i.id,
+      name: i.name,
+      category: i.category,
+      price_stroops: i.price_stroops.toString(),
+      stock: i.stock,
+      unit: i.unit,
+    })),
+    activity: data.activity.map((a) => ({
+      id: a.id,
+      wishlist_id: a.wishlist_id,
+      event_type: a.event_type,
+      tx_hash: a.tx_hash,
+      amount_stroops: a.amount_stroops.toString(),
+      created_at: a.created_at,
+      wishlist_notes: a.wishlist_notes,
+      wishlist_status: a.wishlist_status,
+    })),
+    families: data.families,
+  };
+
+  return <MobileStoreDashboardClient storeData={serialized} />;
 }

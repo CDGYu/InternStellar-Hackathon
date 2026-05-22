@@ -2,16 +2,22 @@
 
 import React, { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Package, CheckCircle, Clock } from "lucide-react";
+import { Package, CheckCircle, Clock, Lock } from "lucide-react";
 import { apiPost } from "@/lib/api/client";
 import { formatXlmWithUnit } from "@/lib/format-xlm";
 
 type MobileWishlistsProps = {
   familyId: string;
   wishlists: any[];
+  viewerRole: "ofw" | "family";
 };
 
-export function MobileWishlists({ familyId, wishlists }: MobileWishlistsProps) {
+export function MobileWishlists({
+  familyId,
+  wishlists,
+  viewerRole,
+}: MobileWishlistsProps) {
+  const isOfw = viewerRole === "ofw";
   const router = useRouter();
   const [submittingId, setSubmittingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -38,12 +44,34 @@ export function MobileWishlists({ familyId, wishlists }: MobileWishlistsProps) {
     }
   }
 
+  async function lockFunds(wishlistId: string) {
+    setError(null);
+    setSubmittingId(wishlistId);
+    try {
+      const result = await apiPost<any>("/api/escrow/lock", {
+        family_id: familyId,
+        wishlist_id: wishlistId,
+      });
+      if (!result.ok) {
+        setError(result.message);
+        return;
+      }
+      startTransition(() => router.refresh());
+    } finally {
+      setSubmittingId(null);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-extrabold mb-2">Orders</h2>
+        <h2 className="text-2xl font-extrabold mb-2">
+          {isOfw ? "Wishlists" : "Orders"}
+        </h2>
         <p className="text-sm text-[#6b7280] leading-relaxed">
-          Confirm delivery to release locked funds to the store.
+          {isOfw
+            ? "Your sponsored family's orders, on-chain."
+            : "Confirm delivery to release locked funds to the store."}
         </p>
       </div>
 
@@ -75,11 +103,47 @@ export function MobileWishlists({ familyId, wishlists }: MobileWishlistsProps) {
                 </div>
               </div>
 
-              {w.status === "delivered" && (
+              {!isOfw && w.status === "delivered" && (
                 <button
                   onClick={() => confirmDelivery(w.id)}
                   disabled={submittingId === w.id}
                   className="w-full bg-[#10b981] text-white py-3 rounded-2xl font-bold flex justify-center items-center gap-2 shadow-lg shadow-[#10b981]/25 active:scale-[0.98] transition-all"
+                >
+                  {submittingId === w.id ? "Confirming..." : "Confirm Delivery"}
+                  {submittingId !== w.id && <CheckCircle className="w-4 h-4" />}
+                </button>
+              )}
+
+              {isOfw && w.status === "pending_approval" && (
+                <button
+                  onClick={() => lockFunds(w.id)}
+                  disabled={submittingId === w.id}
+                  className="w-full bg-gradient-to-r from-[#5b7cff] to-[#7c9aff] text-white py-3 rounded-2xl font-bold flex justify-center items-center gap-2 shadow-lg shadow-[#5b7cff]/25 active:scale-[0.98] transition-all disabled:opacity-60"
+                >
+                  {submittingId === w.id ? "Locking..." : "Lock funds"}
+                  {submittingId !== w.id && <Lock className="w-4 h-4" />}
+                </button>
+              )}
+
+              {/* Funds are locked but the store hasn't marked the order
+                  delivered yet. Releasing now would 409 (invalid_status,
+                  expected "delivered"), so show a disabled waiting state
+                  instead of an actionable button. */}
+              {isOfw && w.status === "locked" && (
+                <button
+                  disabled
+                  className="w-full bg-gray-100 text-gray-400 py-3 rounded-2xl font-bold flex justify-center items-center gap-2 cursor-not-allowed"
+                >
+                  Awaiting store delivery
+                  <Clock className="w-4 h-4" />
+                </button>
+              )}
+
+              {isOfw && w.status === "delivered" && (
+                <button
+                  onClick={() => confirmDelivery(w.id)}
+                  disabled={submittingId === w.id}
+                  className="w-full bg-[#10b981] text-white py-3 rounded-2xl font-bold flex justify-center items-center gap-2 shadow-lg shadow-[#10b981]/25 active:scale-[0.98] transition-all disabled:opacity-60"
                 >
                   {submittingId === w.id ? "Confirming..." : "Confirm Delivery"}
                   {submittingId !== w.id && <CheckCircle className="w-4 h-4" />}
@@ -111,7 +175,11 @@ export function MobileWishlists({ familyId, wishlists }: MobileWishlistsProps) {
 
       {wishlists.length === 0 && (
         <div className="p-8 text-center bg-white border border-black/5 rounded-3xl">
-          <p className="text-sm text-[#6b7280]">No orders found.</p>
+          <p className="text-sm text-[#6b7280]">
+            {isOfw
+              ? "No wishlists yet — your sponsored family hasn't built one."
+              : "No orders yet — your wishlists will appear here once you start one."}
+          </p>
         </div>
       )}
     </div>
