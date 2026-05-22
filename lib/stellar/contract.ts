@@ -96,6 +96,32 @@ function loadConfig(): Config {
   return { rpcUrl, contractId, signer };
 }
 
+/**
+ * Inclusion fee (max bid), in stroops, per operation.
+ *
+ * The SDK's BASE_FEE (100) is the network *minimum*. On mainnet the inclusion
+ * market clears far higher — Horizon fee_stats shows fee actually charged
+ * p50 ~7,000 and max_fee bids p50 ~100,000 — so a 100-stroop tx is not
+ * included within its ~30s validity window and the poll surfaces as
+ * `contract_call_timeout` with nothing landing on-chain. Testnet never hits
+ * this because it is uncongested.
+ *
+ * The inclusion fee is a MAX bid: the network charges only the clearing price
+ * (plus the deterministic Soroban resource fee added by prepareTransaction),
+ * so a generous default is safe on both networks — you don't actually pay it
+ * unless the market is that high. Override per deploy with STELLAR_BASE_FEE
+ * (must be a positive integer ≥ the network minimum, else the default wins).
+ */
+export function resolveInclusionFee(
+  env: Record<string, string | undefined> = process.env,
+): string {
+  const raw = env.STELLAR_BASE_FEE;
+  if (raw && /^\d+$/.test(raw) && BigInt(raw) >= BigInt(BASE_FEE)) {
+    return raw;
+  }
+  return "1000000"; // 0.1 XLM max bid; charged only the clearing fee in practice
+}
+
 // ------------------------------------------------------------------
 // Internal: invoke a write contract method (build, prepare, sign, send, poll)
 // ------------------------------------------------------------------
@@ -164,7 +190,7 @@ async function invokeContract(
     }
 
     const builtTx = new TransactionBuilder(sourceAccount, {
-      fee: BASE_FEE,
+      fee: resolveInclusionFee(),
       networkPassphrase: NETWORK_PASSPHRASE,
     })
       .addOperation(contract.call(method, ...args))

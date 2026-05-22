@@ -14,6 +14,7 @@ import {
   ContractNotConfiguredError,
   depositAndSplit,
   lockEscrow,
+  resolveInclusionFee,
 } from "../lib/stellar/contract";
 
 let passed = 0;
@@ -131,6 +132,20 @@ async function main() {
         }),
       ContractCallError,
     );
+  });
+
+  console.log("lib/stellar/contract — inclusion fee (mainnet timeout fix)");
+  await check("resolveInclusionFee defaults above the SDK minimum", async () => {
+    assert.equal(resolveInclusionFee({}), "1000000");
+  });
+  await check("resolveInclusionFee honors a valid STELLAR_BASE_FEE override", async () => {
+    assert.equal(resolveInclusionFee({ STELLAR_BASE_FEE: "500000" }), "500000");
+  });
+  await check("resolveInclusionFee ignores a sub-minimum override", async () => {
+    assert.equal(resolveInclusionFee({ STELLAR_BASE_FEE: "50" }), "1000000");
+  });
+  await check("resolveInclusionFee ignores a non-numeric override", async () => {
+    assert.equal(resolveInclusionFee({ STELLAR_BASE_FEE: "lots" }), "1000000");
   });
 
   console.log("lib/api/errors");
