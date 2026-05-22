@@ -3,28 +3,42 @@
  *
  *   npm run setup-billers
  *
- * What it does:
- *   1. Loads .env.local (.env fallback) for Supabase service_role + family id.
- *   2. For each demo biller (Meralco, Maynilad), either:
- *        a) Uses the existing biller row's stellar_address if non-empty, or
- *        b) Generates a fresh testnet keypair, Friendbots it for 10k XLM,
- *           and upserts the biller row with the new pubkey.
- *   3. Creates two demo bills for the family (Cora) — one per biller —
- *      with realistic-looking account numbers and amounts.
+ * Network-aware:
+ *   - Testnet: generate a keypair per biller and Friendbot-fund it (10k XLM).
+ *     The secret is discarded — we only ever pay TO the biller.
+ *   - Mainnet/public: there is no Friendbot, so each biller account is created
+ *     with a real `create_account` op signed by the organizer
+ *     (STELLAR_DEMO_SECRET_KEY) and seeded with BILLER_STARTING_BALANCE_XLM
+ *     (default 1.5 XLM). Because real XLM is involved, the generated SECRETS
+ *     ARE SAVED (printed + written to .biller-secrets.local.json, gitignored)
+ *     so the funds stay recoverable.
  *
- * Re-runnable: each step is idempotent. Already-funded billers don't get
- * re-Friendbotted. Demo bills are upserted by a deterministic id so the
- * second run doesn't pile up duplicates.
+ * Network is detected from STELLAR_NETWORK ("public"/"mainnet") or the Horizon
+ * URL. Re-runnable: a biller whose stored address already exists on-chain is
+ * left untouched (no double-funding).
  *
- * Why this is a Node script rather than a SQL seed: testnet accounts have
- * to be Friendbot-funded *before* they can receive a payment op. We need
- * to interleave key generation + funding + DB writes, which is awkward
- * to express in pure SQL.
+ * Mainnet run:
+ *   1. In .env.local set STELLAR_NETWORK=public, the mainnet Horizon URL, and
+ *      STELLAR_DEMO_SECRET_KEY = the organizer's MAINNET secret.
+ *   2. npm run setup-billers
+ *   3. Move the printed biller secrets into your password manager. The
+ *      .biller-secrets.local.json backup is gitignored — don't commit it.
+ *
+ * Why a Node script rather than a SQL seed: accounts must exist on-chain
+ * (Friendbot on testnet, create_account on mainnet) BEFORE they can receive a
+ * payment op. We interleave key generation + funding + DB writes.
  */
-import { existsSync } from "node:fs";
+import { existsSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { Keypair } from "@stellar/stellar-sdk";
+import {
+  BASE_FEE,
+  Horizon,
+  Keypair,
+  Networks,
+  Operation,
+  TransactionBuilder,
+} from "@stellar/stellar-sdk";
 import { createClient } from "@supabase/supabase-js";
 import { config as loadEnv } from "dotenv";
 
@@ -37,18 +51,32 @@ const FRIENDBOT_URL = "https://friendbot.stellar.org";
 const HORIZON_URL =
   process.env.STELLAR_HORIZON_URL ?? "https://horizon-testnet.stellar.org";
 
-// The Day-5 demo's single family (Cora). Same constant as the OFW page —
-// kept here too so the script is standalone-runnable.
+const networkLabel = (process.env.STELLAR_NETWORK ?? "").toLowerCase();
+const IS_MAINNET =
+  networkLabel === "public" ||
+  networkLabel === "mainnet" ||
+  (HORIZON_URL.includes("horizon.stellar.org") &&
+    !HORIZON_URL.includes("testnet"));
+
+const NETWORK_PASSPHRASE = IS_MAINNET ? Networks.PUBLIC : Networks.TESTNET;
+// Inclusion fee (max bid). The SDK BASE_FEE (100) is the network minimum and
+// is routinely outbid on mainnet, so use a generous default there. It is a max
+// bid — only the clearing fee is charged. Override with STELLAR_BASE_FEE.
+const INCLUSION_FEE =
+  process.env.STELLAR_BASE_FEE ?? (IS_MAINNET ? "1000000" : BASE_FEE);
+const STARTING_BALANCE_XLM = process.env.BILLER_STARTING_BALANCE_XLM ?? "1.5";
+
+// The Day-5 demo's single family (Cora).
 const FAMILY_DEMO_ID = "22222222-2222-2222-2222-222222222222";
 
-// Deterministic biller ids → safe to re-run the script without dup rows.
+// Deterministic biller ids → safe to re-run. Demo bill amounts are small on
+// mainnet (real XLM) and demo-scale on testnet.
 const BILLERS = [
   {
     id: "c1111111-1111-1111-1111-111111111111",
     name: "Meralco",
     category: "electricity",
-    // ~30 XLM ≈ a small monthly electric bill at demo scale
-    demo_amount_stroops: 300_000_000n,
+    demo_amount_stroops: IS_MAINNET ? 5_000_000n : 300_000_000n, // 0.5 vs 30 XLM
     demo_account_number: "4567-8901-2345",
     days_until_due: 5,
   },
@@ -56,7 +84,7 @@ const BILLERS = [
     id: "c2222222-2222-2222-2222-222222222222",
     name: "Maynilad",
     category: "water",
-    demo_amount_stroops: 120_000_000n, // ~12 XLM
+    demo_amount_stroops: IS_MAINNET ? 2_000_000n : 120_000_000n, // 0.2 vs 12 XLM
     demo_account_number: "1234-5678",
     days_until_due: 10,
   },
@@ -95,6 +123,31 @@ async function accountExists(pub: string): Promise<boolean> {
   }
 }
 
+// Mainnet: create + fund a biller account with a real create_account op signed
+// by the organizer. Returns the tx hash.
+async function createAndFund(
+  organizer: Keypair,
+  destinationPub: string,
+): Promise<string> {
+  const server = new Horizon.Server(HORIZON_URL);
+  const source = await server.loadAccount(organizer.publicKey());
+  const tx = new TransactionBuilder(source, {
+    fee: INCLUSION_FEE,
+    networkPassphrase: NETWORK_PASSPHRASE,
+  })
+    .addOperation(
+      Operation.createAccount({
+        destination: destinationPub,
+        startingBalance: STARTING_BALANCE_XLM,
+      }),
+    )
+    .setTimeout(120)
+    .build();
+  tx.sign(organizer);
+  const res = await server.submitTransaction(tx);
+  return res.hash;
+}
+
 async function main() {
   const url = envOrDie("NEXT_PUBLIC_SUPABASE_URL");
   const key = envOrDie("SUPABASE_SERVICE_ROLE_KEY");
@@ -102,13 +155,21 @@ async function main() {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
-  console.log("InternStellar — bill setup");
+  // Organizer signer is only needed on mainnet (testnet uses Friendbot).
+  let organizer: Keypair | null = null;
+  if (IS_MAINNET) {
+    organizer = Keypair.fromSecret(envOrDie("STELLAR_DEMO_SECRET_KEY"));
+  }
+
+  console.log(`InternStellar — bill setup (${IS_MAINNET ? "MAINNET" : "testnet"})`);
   console.log("──────────────────────────");
+
+  const savedSecrets: { biller: string; public_key: string; secret: string }[] =
+    [];
 
   for (const b of BILLERS) {
     console.log(`\n· ${b.name} (${b.category})`);
 
-    // 1) Find existing biller row, if any.
     const { data: existing } = await admin
       .from("biller")
       .select("id, stellar_address")
@@ -117,22 +178,36 @@ async function main() {
 
     let stellarAddress = existing?.stellar_address as string | undefined;
 
-    // 2) Generate + fund a keypair if none stored OR the stored account
-    //    isn't on chain yet (e.g. testnet wiped, db restored from a
-    //    different env).
+    // (Re)create the account if there's no stored address OR the stored one
+    // isn't on the *current* network (e.g. a testnet address after a mainnet
+    // cutover).
     if (!stellarAddress || !(await accountExists(stellarAddress))) {
       const kp = Keypair.random();
       stellarAddress = kp.publicKey();
-      console.log(`  generating new keypair → ${stellarAddress.slice(0, 8)}…`);
-      await friendbot(stellarAddress);
-      console.log(`  ✓ Friendbot-funded with 10,000 XLM`);
-      // We deliberately don't save the SECRET key anywhere — InternStellar
-      // doesn't need to spend FROM the biller account, only TO it.
+      if (IS_MAINNET) {
+        console.log(
+          `  creating mainnet account ${stellarAddress.slice(0, 8)}… (+${STARTING_BALANCE_XLM} XLM)`,
+        );
+        const hash = await createAndFund(organizer!, stellarAddress);
+        console.log(`  ✓ created + funded · tx ${hash.slice(0, 12)}…`);
+        // Real XLM lives here — keep the secret so the funds are recoverable.
+        savedSecrets.push({
+          biller: b.name,
+          public_key: stellarAddress,
+          secret: kp.secret(),
+        });
+      } else {
+        console.log(`  generating keypair → ${stellarAddress.slice(0, 8)}…`);
+        await friendbot(stellarAddress);
+        console.log(`  ✓ Friendbot-funded with 10,000 XLM`);
+        // testnet: secret discarded — we only ever pay TO the biller.
+      }
     } else {
-      console.log(`  ✓ already configured → ${stellarAddress.slice(0, 8)}… (funded on chain)`);
+      console.log(
+        `  ✓ already configured → ${stellarAddress.slice(0, 8)}… (on chain)`,
+      );
     }
 
-    // 3) Upsert the biller row.
     const { error: upErr } = await admin.from("biller").upsert(
       {
         id: b.id,
@@ -147,7 +222,6 @@ async function main() {
       process.exit(1);
     }
 
-    // 4) Upsert a demo bill for the family.
     const due = new Date();
     due.setDate(due.getDate() + b.days_until_due);
     const billId = BILL_IDS[b.name as keyof typeof BILL_IDS];
@@ -171,7 +245,22 @@ async function main() {
       process.exit(1);
     }
     console.log(
-      `  ✓ demo bill: ${b.demo_account_number} · ${(Number(b.demo_amount_stroops) / 10_000_000).toFixed(2)} XLM · due in ${b.days_until_due}d`,
+      `  ✓ demo bill: ${b.demo_account_number} · ${(Number(b.demo_amount_stroops) / 10_000_000).toFixed(4)} XLM · due in ${b.days_until_due}d`,
+    );
+  }
+
+  if (savedSecrets.length > 0) {
+    const outPath = resolve(process.cwd(), ".biller-secrets.local.json");
+    writeFileSync(outPath, JSON.stringify(savedSecrets, null, 2));
+    console.log(
+      "\n‼  SAVE THESE BILLER SECRETS — real XLM is recoverable only with them:",
+    );
+    for (const s of savedSecrets) {
+      console.log(`   ${s.biller}: ${s.public_key}`);
+      console.log(`       secret: ${s.secret}`);
+    }
+    console.log(
+      `   Backup written to ${outPath} (gitignored). Move it to your password manager, then delete the file.`,
     );
   }
 

@@ -1,12 +1,12 @@
 import {
   Asset,
-  BASE_FEE,
   Horizon,
   Keypair,
   Operation,
   TransactionBuilder,
 } from "@stellar/stellar-sdk";
 
+import { resolveInclusionFee } from "./contract";
 import { NETWORK_PASSPHRASE } from "./network";
 
 /**
@@ -120,7 +120,7 @@ export async function payBill(args: {
   const xlmAmount = stroopsToXlmString(args.amountStroops);
 
   const tx = new TransactionBuilder(sourceAccount, {
-    fee: BASE_FEE,
+    fee: resolveInclusionFee(),
     networkPassphrase: NETWORK_PASSPHRASE,
   })
     .addOperation(
@@ -151,7 +151,9 @@ export async function payBill(args: {
     let friendly = reason;
     if (reason === "op_no_destination") {
       friendly =
-        "biller_account_not_funded — Friendbot-fund the biller pubkey on testnet first";
+        "biller_account_not_funded — the biller's Stellar account does not exist " +
+        "on this network. Create/fund it first (testnet: Friendbot; mainnet: " +
+        "send ≥1 XLM to the address to create it — there is no Friendbot).";
     } else if (reason === "op_underfunded" || reason === "tx_insufficient_balance") {
       friendly = "ofw_signer_underfunded — top up STELLAR_DEMO_SECRET_KEY";
     }
