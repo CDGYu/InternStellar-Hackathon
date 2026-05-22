@@ -6,6 +6,7 @@ import {
   ChevronRight,
   FileText,
   HelpCircle,
+  Link2,
   Lock,
   Mail,
   Shield,
@@ -80,6 +81,14 @@ export default async function MobileSettingsPage() {
               label="Account Manager"
               hint="Your profile, role, and sign-out"
               href="/mobile/settings/account"
+            />
+          </li>
+          <li>
+            <SettingsLinkRow
+              icon={<Link2 className="w-5 h-5" />}
+              label="Connections"
+              hint="Link your OFW sponsor, family, or store"
+              href="/mobile/settings/connections"
             />
           </li>
           <li>
