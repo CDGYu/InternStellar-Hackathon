@@ -169,7 +169,7 @@ These are **must-say-out-loud** items if anyone (judge, mentor, sponsor) asks ho
 If the mainnet demo misbehaves during rehearsal or the live pitch:
 
 1. On Vercel, change `STELLAR_NETWORK` back to `testnet` and revert the four URL/passphrase vars + `NEXT_PUBLIC_CONTRACT_ID` to the testnet values (the .env.example block has both). Redeploy.
-2. Re-seed the Supabase demo profiles with the testnet keys from `db/seed.sql` (`GAC3WCB5…` for OFW/family, `GCDBRYRNO…` for store).
+2. Re-seed the Supabase demo profiles with the testnet keys from `db/seed.sql` (`GA5M6MWP4UU7VCNDMDT5GE6MHELVY6TQCJ2AIYXHEHEMT5CYH6HKHC6H` for OFW/family — this is the current testnet `STELLAR_DEMO_SECRET_KEY` signer, **not** the older `GAC3WCB5…` `internstellar` identity referenced in day1–4 logs — and `GCDBRYRNO6I5HHJJGKYBHJZB7JUFQ2ZA7HPIKKGBEMXG7J633QF6QBY5` for store).
 3. `bash internstellar-contract/scripts/demo.sh` to confirm the testnet rehearsal still works.
 
 Total rollback time: ~3 minutes if you have the testnet env block bookmarked.
