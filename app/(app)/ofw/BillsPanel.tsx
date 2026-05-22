@@ -14,7 +14,7 @@ import {
 import { cn } from "@/components/ui/cn";
 import { apiPost } from "@/lib/api/client";
 import { formatXlm, formatXlmWithUnit, truncateHash } from "@/lib/format-xlm";
-import { STELLAR_EXPLORER_BASE } from "@/lib/stellar/explorer";
+import { useExplorerBase } from "@/lib/stellar/explorer-context";
 
 /**
  * Bills panel — OFW pays household utilities (Meralco, Maynilad, …)
@@ -251,6 +251,7 @@ function BillRowCard({
   busy: boolean;
   onPay: () => void;
 }) {
+  const STELLAR_EXPLORER_BASE = useExplorerBase();
   const isPaid = bill.effective_status === "paid";
   const isOverdue = bill.effective_status === "overdue";
 

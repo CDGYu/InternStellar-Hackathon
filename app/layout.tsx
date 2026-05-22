@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { Plus_Jakarta_Sans, DM_Sans } from "next/font/google";
 
+import { STELLAR_EXPLORER_BASE } from "@/lib/stellar/explorer";
+import { ExplorerBaseProvider } from "@/lib/stellar/explorer-context";
 import { getTheme } from "@/lib/theme";
 
 import "./globals.css";
@@ -53,7 +55,11 @@ export default async function RootLayout({
       lang="en"
       className={`${display.variable} ${body.variable} ${theme === "dark" ? "dark" : ""}`}
     >
-      <body>{children}</body>
+      <body>
+        <ExplorerBaseProvider base={STELLAR_EXPLORER_BASE}>
+          {children}
+        </ExplorerBaseProvider>
+      </body>
     </html>
   );
 }

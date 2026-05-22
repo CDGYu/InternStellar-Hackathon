@@ -20,7 +20,7 @@ import {
 } from "@/app/(app)/ofw/actions";
 import { apiPost } from "@/lib/api/client";
 import { formatXlm, formatXlmWithUnit, truncateHash } from "@/lib/format-xlm";
-import { STELLAR_EXPLORER_BASE } from "@/lib/stellar/explorer";
+import { useExplorerBase } from "@/lib/stellar/explorer-context";
 import { timeAgo } from "@/lib/time-ago";
 
 /**
@@ -256,6 +256,7 @@ function TrailingAction({
   pendingApi: boolean;
   escrowTxHash: string | null;
 }) {
+  const STELLAR_EXPLORER_BASE = useExplorerBase();
   if (status === "draft" || status === "pending_approval") {
     // Both statuses are editable. For pending_approval we also want a
     // "Lock funds" CTA — but to keep the row clean we keep the edit

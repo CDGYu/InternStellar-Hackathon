@@ -15,7 +15,7 @@ import {
 import { cn } from "@/components/ui/cn";
 import { apiPost } from "@/lib/api/client";
 import { formatXlm, formatXlmWithUnit, truncateHash } from "@/lib/format-xlm";
-import { STELLAR_EXPLORER_BASE } from "@/lib/stellar/explorer";
+import { useExplorerBase } from "@/lib/stellar/explorer-context";
 
 /**
  * OFW "Send Funds" form.
@@ -70,6 +70,7 @@ function xlmToStroops(xlm: string): bigint | null {
 }
 
 export function SendFundsForm({ ofwId }: { ofwId: string }) {
+  const STELLAR_EXPLORER_BASE = useExplorerBase();
   const router = useRouter();
   const [amountXlm, setAmountXlm] = useState("50");
   const [buckets, setBuckets] = useState<BucketState>(DEFAULT_BUCKETS);

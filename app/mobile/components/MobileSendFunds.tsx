@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, ArrowUpRight, CheckCircle, TrendingUp } from "lucide-react";
 import { apiPost } from "@/lib/api/client";
 import { formatXlm, formatXlmWithUnit, truncateHash } from "@/lib/format-xlm";
-import { STELLAR_EXPLORER_BASE } from "@/lib/stellar/explorer";
+import { useExplorerBase } from "@/lib/stellar/explorer-context";
 
 type MobileSendFundsProps = {
   ofwId: string;
@@ -29,6 +29,7 @@ function xlmToStroops(xlm: string): bigint | null {
 }
 
 export function MobileSendFunds({ ofwId, onBack }: MobileSendFundsProps) {
+  const STELLAR_EXPLORER_BASE = useExplorerBase();
   const router = useRouter();
   const [amountXlm, setAmountXlm] = useState("50");
   const [buckets, setBuckets] = useState({ util: 30, groc: 60, emerg: 10 });

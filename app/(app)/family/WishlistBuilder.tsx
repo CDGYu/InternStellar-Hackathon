@@ -12,7 +12,7 @@ import { cn } from "@/components/ui/cn";
 import { apiPost } from "@/lib/api/client";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { formatXlm, formatXlmWithUnit, truncateHash } from "@/lib/format-xlm";
-import { STELLAR_EXPLORER_BASE } from "@/lib/stellar/explorer";
+import { useExplorerBase } from "@/lib/stellar/explorer-context";
 
 /**
  * Family's interactive wishlist builder.
@@ -71,6 +71,7 @@ export function WishlistBuilder({
   initialItems,
   initialEscrowTxHash,
 }: WishlistBuilderProps) {
+  const STELLAR_EXPLORER_BASE = useExplorerBase();
   const router = useRouter();
   const [wishlistId, setWishlistId] = useState<string | null>(initialWishlistId);
   const [status, setStatus] = useState<WishlistStatus | null>(initialStatus);

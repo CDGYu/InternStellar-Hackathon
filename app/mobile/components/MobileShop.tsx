@@ -7,7 +7,7 @@ import { ArrowRight, ArrowUpRight, Lock, Minus, Plus } from "lucide-react";
 import { apiPost } from "@/lib/api/client";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { formatXlm, formatXlmWithUnit, truncateHash } from "@/lib/format-xlm";
-import { STELLAR_EXPLORER_BASE } from "@/lib/stellar/explorer";
+import { useExplorerBase } from "@/lib/stellar/explorer-context";
 import type {
   BuilderInventoryItem,
   BuilderLineItem,
@@ -47,6 +47,7 @@ export function MobileShop({
   initialItems,
   initialEscrowTxHash,
 }: MobileShopProps) {
+  const STELLAR_EXPLORER_BASE = useExplorerBase();
   const router = useRouter();
   const [wishlistId, setWishlistId] = useState<string | null>(initialWishlistId);
   const [status, setStatus] = useState<WishlistStatus | null>(initialStatus);

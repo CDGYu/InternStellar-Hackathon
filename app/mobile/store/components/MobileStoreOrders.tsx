@@ -13,7 +13,7 @@ import {
 
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { formatXlmWithUnit, truncateHash } from "@/lib/format-xlm";
-import { STELLAR_EXPLORER_BASE } from "@/lib/stellar/explorer";
+import { useExplorerBase } from "@/lib/stellar/explorer-context";
 import { timeAgo } from "@/lib/time-ago";
 
 import { MobileStoreCreateOrderForm } from "./MobileStoreCreateOrderForm";
@@ -178,6 +178,7 @@ function OrderCard({
   order: StoreOrder;
   variant: "pending" | "delivered" | "released";
 }) {
+  const STELLAR_EXPLORER_BASE = useExplorerBase();
   const variantConfig = VARIANTS[variant];
   return (
     <li className="p-4 bg-white border border-black/5 shadow-sm rounded-3xl flex items-start gap-3">
@@ -221,6 +222,7 @@ function OrderCard({
 }
 
 function LockedOrderCard({ order }: { order: StoreOrder }) {
+  const STELLAR_EXPLORER_BASE = useExplorerBase();
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
