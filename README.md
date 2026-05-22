@@ -61,8 +61,8 @@ These cannot be configured via SQL or the MCP — flip them once per project:
 
 ## 🎥 Demo
 - 🔗 Live App: https://internstellar-hackathon.vercel.app/
-- 🎬 Demo Video: [YouTube / Loom link]
-- 🖼 Pitch Deck: [View on Canva](https://www.canva.com/design/DAHKW-3NQtg/KsqcUO-JNgxxfDmhMFCjzQ/edit?utm_content=DAHKW-3NQtg&utm_campaign=designshare&utm_medium=link2&utm_source=sharebutton)
+- 🎬 Demo Video: [View on Youtube](https://youtu.be/TpqybyqjGao)
+- 🖼 Pitch Deck: [View on Canva](https://canva.link/nd7t6mpg7whz6d8)
 
 > **Live App credentials (testnet demo data):**
 > - OFW — `maria.ofw@internstellar.demo`
